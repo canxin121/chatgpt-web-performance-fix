@@ -2,7 +2,7 @@
 // @name         ChatGPT Performance Fix
 // @name:zh-CN   ChatGPT 性能优化
 // @namespace    https://github.com/canxin121
-// @version      0.1.0
+// @version      0.1.1
 // @description  Improve ChatGPT performance on long conversations.
 // @description:zh-CN 改善 ChatGPT 长会话性能。
 // @author       canxin

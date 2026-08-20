@@ -17,7 +17,7 @@
     "analyze:diagnosis": "python3 analysis/build-diagnosis.py",
     "analyze:validation": "python3 analysis/build-fix-validation.py"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tampermonkey userscript for improving ChatGPT long-conversation performance.",
   "license": "MIT",
   "repository": {

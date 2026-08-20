@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync } from "node:fs";
 
-const VERSION = "0.1.0"; // Keep fixed unless the maintainer explicitly requests a change.
+const VERSION = "0.1.1"; // Keep fixed unless the maintainer explicitly requests a change.
 
 const header = `// ==UserScript==
 // @name         ChatGPT Performance Fix
