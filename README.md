@@ -1,41 +1,42 @@
 # ChatGPT Performance Fix
 
-一个用于改善 ChatGPT 长会话性能的 Tampermonkey 用户脚本。
-
-当前版本固定为 **0.1.0**。
+用于改善 ChatGPT 长会话性能和滚动体验的 Tampermonkey 用户脚本。
 
 ## 功能
 
-- 更快打开长会话，避免一次性加载全部历史。
-- 历史消息改为手动“加载更多”，避免滚动时自动卡顿。
-- 每次加载保持完整的用户消息和 AI 回复。
-- 优化大量 Markdown、代码块和富文本的滚动体验。
-- 保留安全回退方式，需要时可完整加载当前会话。
+- 长会话按需加载，减少首次打开时的卡顿。
+- 历史消息手动加载，避免滚动时自动触发大量渲染。
+- 保持完整的用户消息与 AI 回复。
+- 优化 Markdown、代码块和富文本较多时的滚动与渲染。
+- 提供完整加载和模式切换，方便处理兼容性问题。
 
 ## 安装
 
-1. 安装 Tampermonkey。
-2. 打开 `dist/chatgpt-performance-fix.user.js`。
-3. 在 Tampermonkey 中安装并刷新 `https://chatgpt.com/`。
+1. 安装 [Tampermonkey](https://www.tampermonkey.net/)。
+2. 打开 [`dist/chatgpt-performance-fix.user.js`](dist/chatgpt-performance-fix.user.js)。
+3. 将脚本安装到 Tampermonkey。
+4. 刷新 `https://chatgpt.com/`。
 
 ## 使用
 
-会话顶部出现 **加载更多** 时，点击后继续加载历史。
+正常浏览 ChatGPT 即可。
+
+长会话需要继续查看历史时，点击顶部的 **加载更多**。
 
 Tampermonkey 菜单提供：
 
 - **完整加载一次**：临时使用 ChatGPT 原始完整加载方式。
 - **切换模式**：在 `balanced`、`aggressive`、`off` 之间切换。
 
-默认推荐 `balanced`。
+默认使用 `balanced`。
 
 ## 开发
 
-需要 Bun。
+需要 [Bun](https://bun.sh/)。
 
 ```bash
-bun run build
 bun test
+bun run build
 ```
 
 浏览器回归：
@@ -44,38 +45,28 @@ bun test
 bun run test:browser
 ```
 
-如果本机没有私有抓包数据，依赖抓包的测试和浏览器回归会自动跳过。
+部分分析和回归测试依赖本地抓包数据；缺少这些数据时会自动跳过，不影响正常构建和基础测试。
 
-## 私有数据
+## 隐私
 
-真实会话抓包、WACZ/WARC、登录态资源和解包后的前端文件只保存在本机 `.private/` 中，并被 Git 完全忽略。
+仓库不包含真实用户会话、Cookie、Token 或其他登录信息。
 
-本地目录约定：
+本地分析所需的 WACZ/WARC、会话抓包和提取资源应放在 `.private/` 下，该目录已被 Git 忽略。
 
-```text
-.private/
-  captures/   原始 WACZ
-  wacz/       解包后的 WARC / index
-  extracted/  从抓包中提取的前端资源
-```
-
-这些文件不应提交或公开分享。公开仓库只包含源码、测试逻辑、构建产物和已经脱敏的聚合分析结果。
-
-## 目录
+## 项目结构
 
 ```text
-src/             核心代码
-scripts/         构建脚本
-tests/           单元测试和浏览器回归
-analysis/        分析工具与脱敏输出
-bench/           基准脚本
-docs/            技术说明
-dist/            可安装用户脚本
-.private/        本地私有数据（不进入 Git）
+src/       核心源码
+scripts/   构建脚本
+tests/     测试与浏览器回归
+analysis/  分析工具和脱敏结果
+bench/     基准测试
+docs/      技术说明
+dist/      可安装用户脚本
 ```
 
-更详细的实现记录见 `docs/technical-notes.md`。
+技术细节见 [`docs/technical-notes.md`](docs/technical-notes.md)。
 
 ## License
 
-MIT
+[MIT](LICENSE)
