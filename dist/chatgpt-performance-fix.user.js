@@ -615,7 +615,8 @@
   var DEFAULT_SETTINGS = {
     mode: "balanced",
     initialTurns: 2,
-    historyBatchTurns: 2
+    historyBatchTurns: 2,
+    showMessageMetadata: true
   };
   var MODE_OPTIONS = {
     balanced: {
@@ -652,7 +653,8 @@
       return {
         mode,
         initialTurns: normalizeTurnLoadSetting(value?.initialTurns, DEFAULT_SETTINGS.initialTurns),
-        historyBatchTurns: normalizeTurnLoadSetting(value?.historyBatchTurns, DEFAULT_SETTINGS.historyBatchTurns)
+        historyBatchTurns: normalizeTurnLoadSetting(value?.historyBatchTurns, DEFAULT_SETTINGS.historyBatchTurns),
+        showMessageMetadata: value?.showMessageMetadata !== false
       };
     } catch {
       return { ...DEFAULT_SETTINGS };
@@ -721,8 +723,9 @@
   }
   async function inspectOutgoingRequest(input, init) {
     const direct = inspectOutgoingBody(init?.body);
-    if (direct.conversationId || direct.messageId || direct.text)
+    if (direct.hasUserMessage || direct.conversationId || direct.messageId || direct.text) {
       return direct;
+    }
     const requestLike = input;
     if (typeof requestLike.clone !== "function")
       return direct;
@@ -2062,89 +2065,239 @@
     if (preferred && !preferred.closest("button"))
       return preferred;
     const leaves = [...anchor.querySelectorAll("span,div")].filter((element) => {
-      if (element.closest("button") || element.dataset.chatgptSidebarSyncStatus === "true") {
+      if (element.closest("button"))
         return false;
-      }
       const text = element.textContent?.trim() ?? "";
       return element.children.length === 0 && text.length > 0 && text.length <= 240;
     });
     return leaves[0] ?? null;
   }
-  function installSidebarFreshness(pageWindow, originalFetch, requestContext, refreshCurrentConversation) {
+  var SIDEBAR_REFRESH_STYLE_ID = "chatgpt-sidebar-refresh-style";
+  function ensureSidebarRefreshStyles(pageWindow) {
+    if (pageWindow.document.getElementById(SIDEBAR_REFRESH_STYLE_ID))
+      return;
+    const style = pageWindow.document.createElement("style");
+    style.id = SIDEBAR_REFRESH_STYLE_ID;
+    style.textContent = `
+[data-chatgpt-sidebar-refresh-control="true"] {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 8px 8px;
+}
+[data-chatgpt-refresh-button="true"] {
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 11px 6px 8px;
+  border: 1px solid var(--border-light, rgba(127,127,127,.22));
+  border-radius: 10px;
+  background: var(--main-surface-secondary, rgba(127,127,127,.08));
+  color: var(--text-primary, currentColor);
+  box-shadow:
+    0 1px 2px rgba(0,0,0,.06),
+    inset 0 1px 0 rgba(255,255,255,.08);
+  font: 550 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: .005em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color .16s ease,
+    background-color .16s ease,
+    border-color .16s ease,
+    box-shadow .16s ease,
+    opacity .16s ease,
+    transform .16s ease;
+}
+[data-chatgpt-sidebar-refresh-button="true"] {
+  width: 100%;
+  color: var(--text-secondary, var(--text-primary, currentColor));
+}
+[data-chatgpt-refresh-button="true"] [data-chatgpt-refresh-icon] {
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-inline-start: -2px;
+  border-radius: 6px;
+  background: rgba(16,163,127,.11);
+  color: #0d8f70;
+  transition: background-color .16s ease, color .16s ease, transform .16s ease;
+}
+[data-chatgpt-refresh-button="true"] [data-chatgpt-refresh-icon] svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  overflow: visible;
+}
+.dark [data-chatgpt-refresh-button="true"] [data-chatgpt-refresh-icon] {
+  background: rgba(25,195,154,.13);
+  color: #19c39a;
+}
+[data-chatgpt-refresh-button="true"] [data-chatgpt-refresh-label] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-chatgpt-refresh-button="true"]:hover:not(:disabled) {
+  border-color: rgba(16,163,127,.42);
+  background: var(--main-surface-tertiary, rgba(127,127,127,.13));
+  color: var(--text-primary, currentColor);
+  box-shadow:
+    0 3px 10px rgba(0,0,0,.09),
+    inset 0 1px 0 rgba(255,255,255,.1);
+  transform: translateY(-1px);
+}
+[data-chatgpt-refresh-button="true"]:hover:not(:disabled) [data-chatgpt-refresh-icon] {
+  background: rgba(16,163,127,.17);
+  color: #087f5f;
+}
+[data-chatgpt-refresh-button="true"]:active:not(:disabled) {
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  transform: translateY(0) scale(.985);
+}
+[data-chatgpt-refresh-button="true"]:focus-visible {
+  outline: none;
+  border-color: #10a37f;
+  box-shadow: 0 0 0 3px rgba(16,163,127,.2);
+}
+[data-chatgpt-refresh-button="true"]:disabled {
+  opacity: .46;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+[data-chatgpt-refresh-button="true"][data-chatgpt-refresh-state="loading"] [data-chatgpt-refresh-icon] svg {
+  animation: chatgpt-refresh-control-spin .72s linear infinite;
+}
+[data-chatgpt-refresh-button="true"][data-chatgpt-refresh-state="success"] {
+  border-color: rgba(16,163,127,.34);
+}
+[data-chatgpt-refresh-button="true"][data-chatgpt-refresh-state="success"] [data-chatgpt-refresh-icon] {
+  background: rgba(16,163,127,.18);
+}
+@supports (background: color-mix(in srgb, currentColor 10%, transparent)) {
+  [data-chatgpt-refresh-button="true"]:hover:not(:disabled) {
+    border-color: color-mix(in srgb, #10a37f 48%, currentColor 12%);
+    background: color-mix(in srgb, var(--main-surface-secondary, transparent) 88%, currentColor 12%);
+  }
+}
+@keyframes chatgpt-refresh-control-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-chatgpt-refresh-button="true"],
+  [data-chatgpt-refresh-button="true"] [data-chatgpt-refresh-icon] {
+    transition: none;
+  }
+  [data-chatgpt-refresh-button="true"][data-chatgpt-refresh-state="loading"] [data-chatgpt-refresh-icon] svg {
+    animation-duration: 1.4s;
+  }
+}
+`;
+    (pageWindow.document.head ?? pageWindow.document.documentElement).append(style);
+  }
+  function createRefreshIcon(pageWindow) {
+    const wrapper = pageWindow.document.createElement("span");
+    wrapper.dataset.chatgptRefreshIcon = "true";
+    wrapper.setAttribute("aria-hidden", "true");
+    const svg = pageWindow.document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("focusable", "false");
+    const first = pageWindow.document.createElementNS("http://www.w3.org/2000/svg", "path");
+    first.setAttribute("d", "M20 7v5h-5");
+    const second = pageWindow.document.createElementNS("http://www.w3.org/2000/svg", "path");
+    second.setAttribute("d", "M4 17v-5h5");
+    const third = pageWindow.document.createElementNS("http://www.w3.org/2000/svg", "path");
+    third.setAttribute("d", "M5.7 9a7 7 0 0 1 11.7-2.6L20 9");
+    const fourth = pageWindow.document.createElementNS("http://www.w3.org/2000/svg", "path");
+    fourth.setAttribute("d", "M18.3 15a7 7 0 0 1-11.7 2.6L4 15");
+    svg.append(first, second, third, fourth);
+    wrapper.append(svg);
+    return wrapper;
+  }
+  function setRefreshButtonLabel(button, label) {
+    let text = button.querySelector("[data-chatgpt-refresh-label]");
+    if (!text) {
+      text = button.ownerDocument.createElement("span");
+      text.dataset.chatgptRefreshLabel = "true";
+      button.append(text);
+    }
+    if (text.textContent !== label)
+      text.textContent = label;
+  }
+  function createRefreshButton(pageWindow, label) {
+    const button = pageWindow.document.createElement("button");
+    button.type = "button";
+    button.dataset.chatgptRefreshButton = "true";
+    button.dataset.chatgptRefreshState = "idle";
+    button.dataset.chatgptSidebarRefreshButton = "true";
+    button.append(createRefreshIcon(pageWindow));
+    setRefreshButtonLabel(button, label);
+    return button;
+  }
+  function installSidebarFreshness(pageWindow, originalFetch, requestContext) {
     const snapshots = new Map;
     let refreshing = false;
     let domSyncScheduled = false;
     let probeBackoffUntil = 0;
     let refreshButton;
-    let conversationRefreshButton;
     const updateRefreshButton = (label = "刷新侧栏") => {
       if (!refreshButton)
         return;
       const ready = requestContext.ready();
       refreshButton.disabled = refreshing || !ready;
-      refreshButton.textContent = refreshing ? "刷新中…" : label;
+      const visibleLabel = refreshing ? "刷新中…" : label;
+      setRefreshButtonLabel(refreshButton, visibleLabel);
+      refreshButton.dataset.chatgptRefreshState = refreshing ? "loading" : label === "已刷新" ? "success" : label === "稍后刷新" ? "backoff" : ready ? "idle" : "unavailable";
       refreshButton.setAttribute("aria-busy", refreshing ? "true" : "false");
-      refreshButton.title = !ready ? "等待 ChatGPT 初始化请求上下文" : Date.now() < probeBackoffUntil ? "最近请求过于频繁，暂时不会发起新的刷新请求" : "手动刷新侧边栏标题与运行状态";
+      refreshButton.title = !ready ? "等待 ChatGPT 初始化请求上下文" : Date.now() < probeBackoffUntil ? "最近请求过于频繁，暂时不会发起新的刷新请求" : "手动刷新侧边栏会话列表";
     };
-    const ensureRefreshButton = () => {
+    const ensureSidebarRefreshButton = () => {
       const existing = pageWindow.document.querySelector('[data-chatgpt-sidebar-refresh-button="true"]');
       if (existing) {
         refreshButton = existing;
-        conversationRefreshButton = pageWindow.document.querySelector('[data-chatgpt-conversation-refresh-button="true"]') ?? undefined;
-        if (conversationRefreshButton) {
-          conversationRefreshButton.disabled = currentConversationId(pageWindow) == null;
-        }
         updateRefreshButton();
         return;
       }
-      const firstConversationAnchor = pageWindow.document.querySelector('a[href*="/c/"]');
+      const firstConversationAnchor = pageWindow.document.querySelector('nav a[href*="/c/"], aside a[href*="/c/"]');
       if (!firstConversationAnchor)
         return;
-      const row = firstConversationAnchor.parentElement ?? firstConversationAnchor;
-      const container = row.parentElement ?? firstConversationAnchor.closest("nav,aside");
+      const sidebarRoot = firstConversationAnchor.closest("nav,aside");
+      const parent = firstConversationAnchor.parentElement;
+      const row = parent && parent !== sidebarRoot ? parent : firstConversationAnchor;
+      const container = row.parentElement ?? sidebarRoot;
       if (!container)
         return;
       const control = pageWindow.document.createElement("div");
       control.dataset.chatgptSidebarRefreshControl = "true";
-      control.style.cssText = [
-        "display:flex",
-        "justify-content:flex-end",
-        "align-items:center",
-        "gap:6px",
-        "padding:4px 8px 6px"
-      ].join(";");
-      const button = pageWindow.document.createElement("button");
-      button.type = "button";
-      button.dataset.chatgptSidebarRefreshButton = "true";
-      button.textContent = "刷新侧栏";
-      button.style.cssText = [
-        "appearance:none",
-        "border:1px solid var(--border-light,rgba(127,127,127,.24))",
-        "border-radius:8px",
-        "padding:4px 8px",
-        "background:var(--main-surface-secondary,rgba(127,127,127,.08))",
-        "color:var(--text-secondary,var(--text-primary,inherit))",
-        "font:500 11px/1.2 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
-        "cursor:pointer"
-      ].join(";");
+      const button = createRefreshButton(pageWindow, "刷新侧栏");
       button.addEventListener("click", () => void refreshManually());
-      const conversationButton = button.cloneNode(false);
-      delete conversationButton.dataset.chatgptSidebarRefreshButton;
-      conversationButton.dataset.chatgptConversationRefreshButton = "true";
-      conversationButton.textContent = "刷新会话";
-      conversationButton.title = "仅在点击后重新加载当前会话；后台重复请求只读取本地快照";
-      conversationButton.disabled = currentConversationId(pageWindow) == null;
-      conversationButton.addEventListener("click", refreshCurrentConversation);
-      control.append(button, conversationButton);
+      control.append(button);
       container.insertBefore(control, row);
       refreshButton = button;
-      conversationRefreshButton = conversationButton;
       updateRefreshButton();
+    };
+    const ensureSidebarRefreshControl = () => {
+      ensureSidebarRefreshStyles(pageWindow);
+      ensureSidebarRefreshButton();
     };
     const syncDom = () => {
       domSyncScheduled = false;
-      ensureRefreshButton();
-      const anchors = pageWindow.document.querySelectorAll('a[href*="/c/"]');
+      ensureSidebarRefreshControl();
+      const anchors = pageWindow.document.querySelectorAll('nav a[href*="/c/"], aside a[href*="/c/"]');
       for (const anchor of anchors) {
         const id = conversationIdFromAnchor(pageWindow, anchor);
         const snapshot = id ? snapshots.get(id) : undefined;
@@ -2157,32 +2310,6 @@
           }
           anchor.dataset.chatgptServerTitle = snapshot.title.trim();
         }
-        const existing = anchor.querySelector('[data-chatgpt-sidebar-sync-status="true"]');
-        if (!isActiveAsyncStatus(snapshot.async_status)) {
-          existing?.remove();
-          anchor.dataset.chatgptAsyncActive = "false";
-          continue;
-        }
-        anchor.dataset.chatgptAsyncActive = "true";
-        if (existing || !titleElement)
-          continue;
-        const badge = pageWindow.document.createElement("span");
-        badge.dataset.chatgptSidebarSyncStatus = "true";
-        badge.textContent = "运行中";
-        badge.setAttribute("aria-label", "此会话仍在运行");
-        badge.style.cssText = [
-          "display:inline-flex",
-          "align-items:center",
-          "flex:0 0 auto",
-          "margin-left:6px",
-          "padding:1px 5px",
-          "border:1px solid currentColor",
-          "border-radius:999px",
-          "font-size:10px",
-          "line-height:1.4",
-          "opacity:.75"
-        ].join(";");
-        titleElement.insertAdjacentElement("afterend", badge);
       }
     };
     const scheduleDomSync = () => {
@@ -2201,16 +2328,8 @@
       const previous = snapshots.get(id);
       snapshots.set(id, {
         id,
-        title: typeof row.title === "string" || row.title === null ? row.title : previous?.title,
-        update_time: row.update_time ?? previous?.update_time,
-        async_status: Object.hasOwn(row, "async_status") ? row.async_status : previous?.async_status
+        title: typeof row.title === "string" || row.title === null ? row.title : previous?.title
       });
-    };
-    const noteConversationStatus = (conversationId, value) => {
-      ingest({ conversation_id: conversationId, async_status: value });
-      const root = pageWindow.document.documentElement;
-      root.dataset.chatgptSidebarStatusSignals = String(Number(root.dataset.chatgptSidebarStatusSignals ?? "0") + 1);
-      scheduleDomSync();
     };
     const noteRateLimit = (response) => {
       if (response.status !== 429)
@@ -2305,9 +2424,25 @@
       requestContextChanged: () => {
         updateRefreshButton();
         scheduleDomSync();
-      },
-      noteConversationStatus
+      }
     };
+  }
+  function recordFromUnknown(value) {
+    return value != null && typeof value === "object" && !Array.isArray(value) ? value : null;
+  }
+  function nonEmptyString(value) {
+    return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  }
+  function firstNonEmptyString(...values) {
+    return values.map(nonEmptyString).find((value) => value != null) ?? null;
+  }
+  function chatgptTimestampMs(value) {
+    const numeric = typeof value === "number" ? value : typeof value === "string" && value.trim().length > 0 ? Number(value) : Number.NaN;
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return null;
+    }
+    const milliseconds = numeric >= 10000000000 ? numeric : numeric * 1000;
+    return Number.isFinite(milliseconds) && Number.isFinite(new Date(milliseconds).getTime()) ? milliseconds : null;
   }
   function textFromOutgoingMessage(message) {
     if (!message || typeof message !== "object")
@@ -2328,7 +2463,9 @@
       conversationId: null,
       messageId: null,
       text: null,
-      hasUserMessage: false
+      hasUserMessage: false,
+      createdAtMs: null,
+      requestedModelSlug: null
     };
     if (typeof body !== "string")
       return empty;
@@ -2341,27 +2478,550 @@
         const author = candidate.author;
         return Boolean(author && typeof author === "object" && author.role === "user");
       });
+      const metadata = recordFromUnknown(message?.metadata);
+      const requestedModelSlug = [
+        parsed.requested_model_slug,
+        parsed.requested_default_model,
+        parsed.default_model_slug,
+        parsed.model_slug,
+        parsed.model,
+        metadata?.requested_model_slug,
+        message?.requested_model_slug,
+        message?.requested_default_model,
+        message?.default_model_slug,
+        message?.model_slug,
+        message?.model
+      ].map(nonEmptyString).find((value) => value != null) ?? null;
       return {
         conversationId: typeof parsed.conversation_id === "string" ? parsed.conversation_id : null,
         messageId: typeof message?.id === "string" ? message.id : null,
         text: textFromOutgoingMessage(message),
-        hasUserMessage: Boolean(message)
+        hasUserMessage: Boolean(message),
+        createdAtMs: chatgptTimestampMs(message?.create_time),
+        requestedModelSlug
       };
     } catch {
       try {
         const params = new URLSearchParams(body);
         const messageId = params.get("message_id");
         const text = params.get("text") ?? params.get("prompt");
+        const requestedModelSlug = [
+          "requested_model_slug",
+          "requested_default_model",
+          "default_model_slug",
+          "model_slug",
+          "model"
+        ].map((key) => nonEmptyString(params.get(key))).find((value) => value != null) ?? null;
         return {
           conversationId: params.get("conversation_id"),
           messageId,
           text,
-          hasUserMessage: Boolean(messageId || text?.trim())
+          hasUserMessage: Boolean(messageId || text?.trim()),
+          createdAtMs: chatgptTimestampMs(Number(params.get("create_time"))),
+          requestedModelSlug
         };
       } catch {
         return empty;
       }
     }
+  }
+  function effectiveMessageModel(message) {
+    const metadata = message.metadata;
+    const resolved = firstNonEmptyString(metadata?.resolved_model_slug, message.resolved_model_slug);
+    if (resolved)
+      return { slug: resolved, source: "resolved" };
+    const recorded = firstNonEmptyString(metadata?.model_slug, metadata?.default_model_slug, message.model_slug, message.default_model_slug, message.model);
+    if (recorded)
+      return { slug: recorded, source: "message" };
+    const requested = firstNonEmptyString(metadata?.requested_model_slug, message.requested_model_slug, message.requested_default_model);
+    return requested ? { slug: requested, source: "requested" } : null;
+  }
+  function isVisibleAssistantForMetadata(message) {
+    if (message.author?.role !== "assistant")
+      return false;
+    if (message.metadata?.is_visually_hidden_from_conversation === true)
+      return false;
+    if (message.recipient != null && message.recipient !== "all")
+      return false;
+    return !["code", "execution_output", "thoughts", "reasoning_recap"].includes(String(message.content?.content_type ?? ""));
+  }
+  function friendlyModelLabel(slug) {
+    const normalized = slug.trim().replace(/\s+/g, " ");
+    const titleCaseWords = (value) => value.split(/[-_\s]+/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+    const gpt = normalized.match(/^gpt-(\d+)(?:[-.](\d+))?(.*)$/i);
+    if (gpt) {
+      const version = gpt[2] ? `${gpt[1]}.${gpt[2]}` : gpt[1];
+      const suffixText = gpt[3].replace(/^[-_.]+/, "");
+      const compactSuffix = suffixText.match(/^([a-z])(?:[-_](.*))?$/i);
+      const suffix = compactSuffix ? `${compactSuffix[1].toLowerCase()}${compactSuffix[2] ? ` ${titleCaseWords(compactSuffix[2])}` : ""}` : titleCaseWords(suffixText);
+      return `GPT-${version}${suffix ? ` ${suffix}` : ""}`;
+    }
+    if (/^chatgpt-/i.test(normalized)) {
+      return `ChatGPT ${titleCaseWords(normalized.replace(/^chatgpt-/i, ""))}`;
+    }
+    return titleCaseWords(normalized);
+  }
+  function installMessageMetadataDisplay(pageWindow) {
+    const records = new Map;
+    const elementsById = new Map;
+    const pendingScanRoots = new Set;
+    let scanFrame;
+    const ensureStyles = () => {
+      const id = "chatgpt-message-metadata-style";
+      if (pageWindow.document.getElementById(id))
+        return;
+      const style = pageWindow.document.createElement("style");
+      style.id = id;
+      style.textContent = `
+[data-chatgpt-message-metadata="true"] {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  margin-block: 7px 1px;
+  padding: 2px 7px;
+  border: 1px solid rgba(127,127,127,.15);
+  border-radius: 999px;
+  background: rgba(127,127,127,.06);
+  color: var(--token-text-secondary, var(--text-secondary, currentColor));
+  font: 500 10.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  letter-spacing: .005em;
+  opacity: .66;
+  white-space: nowrap;
+  transition: opacity .15s ease, background-color .15s ease;
+}
+[data-chatgpt-message-metadata="true"]:hover {
+  opacity: .92;
+  border-color: rgba(127,127,127,.24);
+  background: rgba(127,127,127,.1);
+}
+@supports (color: color-mix(in srgb, currentColor 5%, transparent)) {
+  [data-chatgpt-message-metadata="true"] {
+    border-color: color-mix(in srgb, currentColor 13%, transparent);
+    background: color-mix(in srgb, currentColor 5%, transparent);
+  }
+  [data-chatgpt-message-metadata="true"]:hover {
+    border-color: color-mix(in srgb, currentColor 22%, transparent);
+    background: color-mix(in srgb, currentColor 9%, transparent);
+  }
+}
+[data-chatgpt-message-metadata="true"] time,
+[data-chatgpt-message-metadata="true"] [data-chatgpt-message-model] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-chatgpt-message-metadata="true"] time {
+  flex: 0 1 auto;
+}
+[data-chatgpt-message-metadata="true"] [data-chatgpt-message-model] {
+  flex: 0 1 auto;
+  font-weight: 600;
+}
+[data-chatgpt-message-metadata="true"] [data-chatgpt-message-time]::before {
+  content: "◷";
+  margin-inline-end: 3px;
+  font-size: 11px;
+  opacity: .72;
+}
+[data-chatgpt-message-metadata="true"] [data-chatgpt-message-model]::before {
+  content: "✦";
+  margin-inline-end: 3px;
+  font-size: 10px;
+  opacity: .68;
+}
+[data-chatgpt-message-metadata-role="user"] {
+  margin-inline-start: auto;
+  align-self: flex-end;
+}
+[data-chatgpt-message-metadata-role="assistant"] {
+  margin-inline-end: auto;
+}
+[data-chatgpt-message-metadata="true"] [aria-hidden="true"] {
+  opacity: .55;
+}
+@media print {
+  [data-chatgpt-message-metadata="true"] { display: none !important; }
+}`;
+      const styleTarget = pageWindow.document.head ?? pageWindow.document.documentElement;
+      styleTarget?.append(style);
+    };
+    const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23"
+    });
+    const formatDate = (milliseconds) => {
+      const parts = Object.fromEntries(dateFormatter.formatToParts(new Date(milliseconds)).map((part) => [
+        part.type,
+        part.value
+      ]));
+      return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+    };
+    const roleForElement = (element) => {
+      const direct = element.getAttribute("data-message-author-role");
+      if (direct === "user" || direct === "assistant")
+        return direct;
+      const roleHost = element.closest("[data-message-author-role]");
+      const nestedRole = roleHost?.getAttribute("data-message-author-role");
+      if (nestedRole === "user" || nestedRole === "assistant")
+        return nestedRole;
+      const turn = element.closest('[data-turn="user"], [data-turn="assistant"]');
+      const turnRole = turn?.getAttribute("data-turn");
+      return turnRole === "user" || turnRole === "assistant" ? turnRole : null;
+    };
+    const renderRecord = (id) => {
+      const record = records.get(id);
+      const elements = elementsById.get(id);
+      if (!record || !elements)
+        return;
+      for (const element of [...elements]) {
+        if (!element.isConnected) {
+          elements.delete(element);
+          continue;
+        }
+        const role = roleForElement(element) ?? record.role;
+        if (role !== "user" && role !== "assistant")
+          continue;
+        if (record.createdAtMs == null && !record.modelSlug)
+          continue;
+        ensureStyles();
+        let host = [...element.children].find((child) => child instanceof pageWindow.HTMLElement && child.dataset.chatgptMessageMetadata === "true");
+        if (!host) {
+          host = pageWindow.document.createElement("div");
+          host.dataset.chatgptMessageMetadata = "true";
+          const delivery = [...element.children].find((child) => child instanceof pageWindow.HTMLElement && child.dataset.chatgptDeliveryStatus === "true");
+          element.insertBefore(host, delivery ?? null);
+        }
+        const fingerprint = [
+          role,
+          record.createdAtMs ?? "",
+          record.timeSource ?? "",
+          record.modelSlug ?? "",
+          record.modelSource ?? ""
+        ].join("|");
+        if (host.dataset.chatgptMessageMetadataFingerprint === fingerprint)
+          continue;
+        host.dataset.chatgptMessageMetadataFingerprint = fingerprint;
+        host.dataset.chatgptMessageMetadataRole = role;
+        host.dataset.chatgptMessageMetadataTimeSource = record.timeSource ?? "";
+        host.dataset.chatgptMessageMetadataModelSource = record.modelSource ?? "";
+        host.replaceChildren();
+        const labels = [];
+        if (record.createdAtMs != null) {
+          const timeWrap = pageWindow.document.createElement("span");
+          timeWrap.dataset.chatgptMessageTime = "true";
+          const time = pageWindow.document.createElement("time");
+          const formatted = formatDate(record.createdAtMs);
+          time.dateTime = new Date(record.createdAtMs).toISOString();
+          time.textContent = formatted;
+          labels.push(`${record.timeSource === "server" ? "服务器创建时间" : "本地发送时间"} ${formatted}`);
+          timeWrap.append(time);
+          host.append(timeWrap);
+        }
+        if (record.createdAtMs != null && record.modelSlug) {
+          const separator = pageWindow.document.createElement("span");
+          separator.setAttribute("aria-hidden", "true");
+          separator.textContent = "·";
+          host.append(separator);
+        }
+        if (record.modelSlug) {
+          const model = pageWindow.document.createElement("span");
+          model.dataset.chatgptMessageModel = record.modelSlug;
+          model.textContent = friendlyModelLabel(record.modelSlug);
+          host.append(model);
+          const sourceLabel = record.modelSource === "resolved" ? "解析后的有效模型" : record.modelSource === "message" ? "消息记录模型" : record.modelSource === "inferred" ? "由当前回复推断" : "请求选择模型";
+          labels.push(`${sourceLabel} ${record.modelSlug}`);
+        }
+        host.setAttribute("aria-label", labels.join("，"));
+        host.title = labels.join(`
+`);
+      }
+      if (elements.size === 0)
+        elementsById.delete(id);
+    };
+    const registerCandidate = (candidate) => {
+      const roleElement = candidate.matches("[data-message-author-role]") ? candidate : candidate.closest("[data-message-author-role]") ?? candidate.querySelector("[data-message-author-role]");
+      const idElement = roleElement?.hasAttribute("data-message-id") ? roleElement : candidate.hasAttribute("data-message-id") ? candidate : roleElement?.querySelector("[data-message-id]") ?? candidate.closest("[data-message-id]") ?? candidate.querySelector("[data-message-id]");
+      const host = roleElement ?? idElement;
+      const id = idElement?.getAttribute("data-message-id");
+      if (!host || !id || !roleForElement(host))
+        return;
+      const elements = elementsById.get(id) ?? new Set;
+      elements.add(host);
+      elementsById.set(id, elements);
+      renderRecord(id);
+    };
+    const scanRoot = (root) => {
+      const candidates = new Set([root]);
+      const closest = root.closest("[data-message-author-role], [data-message-id]");
+      if (closest)
+        candidates.add(closest);
+      for (const element of root.querySelectorAll("[data-message-author-role], [data-message-id]")) {
+        candidates.add(element);
+      }
+      for (const candidate of candidates)
+        registerCandidate(candidate);
+    };
+    const scheduleScan = (root = pageWindow.document.documentElement) => {
+      pendingScanRoots.add(root);
+      if (scanFrame != null)
+        return;
+      const run = () => {
+        scanFrame = undefined;
+        const roots = [...pendingScanRoots];
+        pendingScanRoots.clear();
+        for (const pendingRoot of roots) {
+          if (pendingRoot.isConnected)
+            scanRoot(pendingRoot);
+        }
+      };
+      scanFrame = typeof pageWindow.requestAnimationFrame === "function" ? pageWindow.requestAnimationFrame(run) : pageWindow.setTimeout(run, 0);
+    };
+    const mergeRecord = (id, next) => {
+      if (!id)
+        return false;
+      const record = records.get(id) ?? { id, timeRank: 0, modelRank: 0 };
+      let changed = false;
+      if ((next.role === "user" || next.role === "assistant") && record.role !== next.role) {
+        record.role = next.role;
+        changed = true;
+      }
+      if (next.createdAtMs != null && Number.isFinite(next.createdAtMs) && (next.timeRank ?? 0) >= record.timeRank && (record.createdAtMs !== next.createdAtMs || record.timeSource !== next.timeSource)) {
+        record.createdAtMs = next.createdAtMs;
+        record.timeSource = next.timeSource;
+        record.timeRank = next.timeRank ?? 0;
+        changed = true;
+      }
+      if (next.modelSlug && (next.modelRank ?? 0) >= record.modelRank && (record.modelSlug !== next.modelSlug || record.modelSource !== next.modelSource)) {
+        record.modelSlug = next.modelSlug;
+        record.modelSource = next.modelSource;
+        record.modelRank = next.modelRank ?? 0;
+        changed = true;
+      }
+      if (!changed)
+        return false;
+      records.delete(id);
+      records.set(id, record);
+      while (records.size > 20000) {
+        const oldest = records.keys().next().value;
+        if (typeof oldest !== "string")
+          break;
+        records.delete(oldest);
+        elementsById.delete(oldest);
+      }
+      renderRecord(id);
+      return true;
+    };
+    const ingestMessage = (message) => {
+      const id = nonEmptyString(message.id);
+      const role = message.author?.role;
+      if (!id || role !== "user" && role !== "assistant")
+        return;
+      const model = effectiveMessageModel(message);
+      mergeRecord(id, {
+        role,
+        createdAtMs: chatgptTimestampMs(message.create_time),
+        timeSource: "server",
+        timeRank: chatgptTimestampMs(message.create_time) == null ? 0 : 2,
+        modelSlug: model?.slug,
+        modelSource: model?.source,
+        modelRank: model?.source === "resolved" ? 4 : model?.source === "message" ? 3 : 1
+      });
+    };
+    const ingestMessages = (messages) => {
+      for (const message of messages)
+        ingestMessage(message);
+      let userId = null;
+      for (const message of messages) {
+        if (message.author?.role === "user") {
+          userId = nonEmptyString(message.id);
+          continue;
+        }
+        if (!userId || !isVisibleAssistantForMetadata(message))
+          continue;
+        const model = effectiveMessageModel(message);
+        if (!model)
+          continue;
+        mergeRecord(userId, {
+          modelSlug: model.slug,
+          modelSource: "inferred",
+          modelRank: 2
+        });
+      }
+    };
+    const ingestPayload = (payload) => {
+      const value = recordFromUnknown(payload);
+      if (!value)
+        return;
+      let ingested = false;
+      const directMessage = recordFromUnknown(value.message);
+      if (directMessage) {
+        ingestMessages([directMessage]);
+        ingested = true;
+      }
+      if (Array.isArray(value.messages)) {
+        const messages = value.messages.map(recordFromUnknown).filter((message) => message != null);
+        ingestMessages(messages);
+        ingested = ingested || messages.length > 0;
+      }
+      const mapping = recordFromUnknown(value.mapping);
+      if (mapping) {
+        const allMessages = Object.values(mapping).map(recordFromUnknown).map((node) => recordFromUnknown(node?.message)).filter((message) => message != null);
+        for (const message of allMessages)
+          ingestMessage(message);
+        const path = [];
+        const seen = new Set;
+        let nodeId = nonEmptyString(value.current_node);
+        while (nodeId && !seen.has(nodeId)) {
+          seen.add(nodeId);
+          const node = recordFromUnknown(mapping[nodeId]);
+          const message = recordFromUnknown(node?.message);
+          if (message)
+            path.push(message);
+          nodeId = nonEmptyString(node?.parent);
+        }
+        ingestMessages(path.reverse());
+        ingested = ingested || allMessages.length > 0;
+      }
+      const nestedConversation = recordFromUnknown(value.conversation);
+      if (nestedConversation && nestedConversation !== value) {
+        ingestPayload(nestedConversation);
+      }
+      if (ingested) {
+        const root = pageWindow.document.documentElement;
+        root.dataset.chatgptMessageMetadataRecords = String(records.size);
+        scheduleScan();
+      }
+    };
+    const noteOutgoing = (probe) => {
+      if (!probe.hasUserMessage || !probe.messageId)
+        return;
+      mergeRecord(probe.messageId, {
+        role: "user",
+        createdAtMs: probe.createdAtMs ?? Date.now(),
+        timeSource: "client",
+        timeRank: 1,
+        modelSlug: probe.requestedModelSlug ?? undefined,
+        modelSource: probe.requestedModelSlug ? "requested" : undefined,
+        modelRank: probe.requestedModelSlug ? 1 : 0
+      });
+      pageWindow.document.documentElement.dataset.chatgptOutgoingMessageMetadata = "captured";
+      scheduleScan();
+    };
+    const observeResponse = (response) => {
+      if (!response.ok)
+        return;
+      let clone;
+      try {
+        clone = response.clone();
+      } catch {
+        return;
+      }
+      const contentType = clone.headers.get("content-type")?.toLowerCase() ?? "";
+      if (contentType.includes("text/event-stream")) {
+        const root = pageWindow.document.documentElement;
+        root.dataset.chatgptMessageMetadataStreams = String(Number(root.dataset.chatgptMessageMetadataStreams ?? "0") + 1);
+        (async () => {
+          const reader = clone.body?.getReader();
+          if (!reader)
+            return;
+          const decoder = new pageWindow.TextDecoder;
+          const completeIds = new Set;
+          const parseAttempts = new Map;
+          let buffer = "";
+          const processBlock = (block) => {
+            const data = block.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join(`
+`).trim();
+            if (!data)
+              return false;
+            if (data === "[DONE]")
+              return true;
+            if (!data.includes('"message"') && !data.includes('"messages"') && !data.includes('"author"')) {
+              return false;
+            }
+            const messageOffset = data.indexOf('"message"');
+            const idProbe = (messageOffset >= 0 ? data.slice(messageOffset) : data).slice(0, 4096).match(/"id"\s*:\s*"([^"\\]+)"/);
+            const candidateId = idProbe?.[1] ?? "unknown";
+            if (completeIds.has(candidateId))
+              return false;
+            const attempts = parseAttempts.get(candidateId) ?? 0;
+            if (attempts >= 4)
+              return false;
+            parseAttempts.set(candidateId, attempts + 1);
+            try {
+              ingestPayload(JSON.parse(data));
+              if (candidateId !== "unknown") {
+                const record = records.get(candidateId);
+                if (record?.createdAtMs != null && record.modelSlug) {
+                  completeIds.add(candidateId);
+                }
+              }
+            } catch {}
+            return false;
+          };
+          try {
+            for (;; ) {
+              const chunk = await reader.read();
+              if (chunk.done)
+                break;
+              buffer += decoder.decode(chunk.value, { stream: true });
+              for (;; ) {
+                const boundary = /\r?\n\r?\n/.exec(buffer);
+                if (!boundary)
+                  break;
+                const block = buffer.slice(0, boundary.index);
+                buffer = buffer.slice(boundary.index + boundary[0].length);
+                if (processBlock(block)) {
+                  await reader.cancel();
+                  return;
+                }
+              }
+            }
+            buffer += decoder.decode();
+            if (buffer)
+              processBlock(buffer);
+          } catch {}
+        })();
+        return;
+      }
+      if (contentType.includes("json")) {
+        clone.json().then(ingestPayload).catch(() => {
+          return;
+        });
+      }
+    };
+    const observer = new pageWindow.MutationObserver((records2) => {
+      for (const mutation of records2) {
+        if (mutation.type === "attributes") {
+          if (mutation.target instanceof pageWindow.Element) {
+            scheduleScan(mutation.target);
+          }
+          continue;
+        }
+        for (const node of mutation.addedNodes) {
+          if (node instanceof pageWindow.Element)
+            scheduleScan(node);
+        }
+      }
+    });
+    observer.observe(pageWindow.document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-message-id", "data-message-author-role", "data-turn"],
+      childList: true,
+      subtree: true
+    });
+    ensureStyles();
+    scheduleScan();
+    pageWindow.document.documentElement.dataset.chatgptMessageMetadataDisplay = "enabled";
+    return { ingestPayload, noteOutgoing, observeResponse };
   }
   function installDeliveryVerifier(pageWindow) {
     let sequence = 0;
@@ -3285,7 +3945,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
       return JSON.parse(body);
     }
   }
-  function installLegacyResponseFallback(pageWindow, mode) {
+  function installLegacyResponseFallback(pageWindow, mode, observePayload) {
     const marker = "__chatgptPerformanceFixResponseFallback";
     const existing = Reflect.get(pageWindow, marker);
     if (existing?.clear)
@@ -3348,6 +4008,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
         } catch (error) {
           console.warn(`[${SCRIPT_NAME}] Legacy response fallback failed`, error);
         }
+        observePayload?.(parsed);
         const value = { body, payload: parsed, fingerprint, stats };
         byUrl.set(response.url, value);
         while (byUrl.size > 8) {
@@ -3399,7 +4060,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
     pageWindow.document.documentElement.dataset.chatgptResponseFallback = "enabled";
     return controller;
   }
-  async function materializeAndOptimize(pageWindow, response, mode, exposedUrl = response.url) {
+  async function materializeAndOptimize(pageWindow, response, mode, exposedUrl = response.url, observePayload) {
     const originalBody = await readResponseText(response);
     let body = originalBody;
     let optimized = false;
@@ -3411,6 +4072,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
         const result = await optimizeLegacyOffMain(pageWindow, originalBody, MODE_OPTIONS[mode]);
         stats = result.stats;
         activeConversation = !isIdleConversation(result.payload);
+        observePayload?.(result.payload);
         if (result.stats.changed) {
           body = JSON.stringify(result.payload);
           optimized = true;
@@ -3444,7 +4106,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
       apiKind: "legacy-full"
     };
   }
-  async function materializeAndOptimizePaginated(pageWindow, response, apiKind, mode, exposedUrl, requestWasClamped, createLocalCursor, workerJobToken, renderTurns = MODE_OPTIONS[mode].paginatedRenderTurns) {
+  async function materializeAndOptimizePaginated(pageWindow, response, apiKind, mode, exposedUrl, requestWasClamped, createLocalCursor, workerJobToken, renderTurns = MODE_OPTIONS[mode].paginatedRenderTurns, observePayload) {
     const originalBody = await readResponseText(response);
     let body = originalBody;
     let optimized = requestWasClamped;
@@ -3460,6 +4122,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
         cacheable = result.cacheable;
         activeConversation = result.active;
         optimizedPayload = result.payload;
+        observePayload?.(result.payload);
         registerStaticCodeBlocks(pageWindow, result.codeBlocks);
         if (result.stats.changed || workerJobToken)
           optimized = true;
@@ -3694,10 +4357,10 @@ html [data-chatgpt-static-code-state="loading"] pre {
       headers: firstResponse.headers
     });
   }
-  async function materializeLegacyRequestLazily(pageWindow, originalFetch, input, init, legacyUrl, conversationId, mode, settings, createLocalCursor) {
+  async function materializeLegacyRequestLazily(pageWindow, originalFetch, input, init, legacyUrl, conversationId, mode, settings, createLocalCursor, observePayload) {
     if (settings.initialTurns === "all") {
       const legacyResponse = await originalFetch(input, { ...init, cache: "no-store" });
-      const materialized = await materializeAndOptimize(pageWindow, legacyResponse, mode, legacyUrl);
+      const materialized = await materializeAndOptimize(pageWindow, legacyResponse, mode, legacyUrl, observePayload);
       const headers = new pageWindow.Headers(materialized.headers);
       headers.set("x-chatgpt-performance-fix-initial-turns", "all");
       headers.set("x-chatgpt-performance-fix-cacheable", "0");
@@ -3716,7 +4379,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
       const nativeResponse = prepared.response;
       if (!nativeResponse.ok) {
         if (nativeResponse.status === 429) {
-          const rateLimited = await materializeAndOptimizePaginated(pageWindow, nativeResponse, "paginated-initial", mode, legacyUrl, false, createLocalCursor);
+          const rateLimited = await materializeAndOptimizePaginated(pageWindow, nativeResponse, "paginated-initial", mode, legacyUrl, false, createLocalCursor, undefined, MODE_OPTIONS[mode].paginatedRenderTurns, observePayload);
           const headers2 = new pageWindow.Headers(rateLimited.headers);
           headers2.set("x-chatgpt-performance-fix-lazy", "rate-limited");
           return {
@@ -3729,7 +4392,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
         }
         throw new Error(`Native pagination returned HTTP ${nativeResponse.status}`);
       }
-      const nativeMaterialized = await materializeAndOptimizePaginated(pageWindow, nativeResponse, "paginated-initial", mode, legacyUrl, true, createLocalCursor, prepared.workerJobToken, initialTurns);
+      const nativeMaterialized = await materializeAndOptimizePaginated(pageWindow, nativeResponse, "paginated-initial", mode, legacyUrl, true, createLocalCursor, prepared.workerJobToken, initialTurns, observePayload);
       const optimizedNativePayload = await parseJsonOffMain(pageWindow, nativeMaterialized.body);
       const lazyPayload = convertNativeInitialToLazyConversation(optimizedNativePayload, conversationId, MODE_OPTIONS[mode].paginatedMaxTurns);
       if (!lazyPayload) {
@@ -3755,7 +4418,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
         throw error;
       console.warn(`[${SCRIPT_NAME}] Native lazy loading was unavailable; falling back to the legacy response`, error);
       const legacyResponse = await originalFetch(input, init);
-      return materializeAndOptimize(pageWindow, legacyResponse, mode, legacyUrl);
+      return materializeAndOptimize(pageWindow, legacyResponse, mode, legacyUrl, observePayload);
     }
   }
   function install(pageWindow) {
@@ -3777,15 +4440,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
       } catch {}
       pageWindow.location.reload();
     };
-    const refreshCurrentConversation = () => {
-      const root = pageWindow.document.documentElement;
-      root.dataset.chatgptManualConversationRefreshes = String(Number(root.dataset.chatgptManualConversationRefreshes ?? "0") + 1);
-      const shouldReload = pageWindow.dispatchEvent(new pageWindow.CustomEvent("chatgpt-performance-fix:manual-conversation-refresh", { cancelable: true }));
-      if (shouldReload)
-        pageWindow.location.reload();
-    };
     if (typeof GM_registerMenuCommand === "function") {
-      GM_registerMenuCommand("刷新当前会话", refreshCurrentConversation);
       GM_registerMenuCommand("加载全部消息", loadCurrentConversationFully);
       GM_registerMenuCommand(`默认打开：${formatTurnLoadSetting(settings.initialTurns)}`, () => {
         (async () => {
@@ -3805,6 +4460,11 @@ html [data-chatgpt-static-code-state="loading"] pre {
           writeSettings(pageWindow.localStorage, settings);
         })();
       });
+      GM_registerMenuCommand(settings.showMessageMetadata ? "隐藏消息时间与模型" : "显示消息时间与模型", () => {
+        settings.showMessageMetadata = !settings.showMessageMetadata;
+        writeSettings(pageWindow.localStorage, settings);
+        pageWindow.location.reload();
+      });
       GM_registerMenuCommand(`切换模式（${settings.mode}）`, () => {
         const nextMode = settings.mode === "balanced" ? "aggressive" : settings.mode === "aggressive" ? "off" : "balanced";
         writeSettings(pageWindow.localStorage, { ...settings, mode: nextMode });
@@ -3820,11 +4480,12 @@ html [data-chatgpt-static-code-state="loading"] pre {
       return;
     }
     const activeMode = settings.mode;
-    const responseFallback = installLegacyResponseFallback(pageWindow, activeMode);
+    const messageMetadataDisplay = settings.showMessageMetadata ? installMessageMetadataDisplay(pageWindow) : null;
+    const responseFallback = installLegacyResponseFallback(pageWindow, activeMode, messageMetadataDisplay?.ingestPayload);
     installManualPaginationObserver(pageWindow, settings);
     const originalFetch = pageWindow.fetch.bind(pageWindow);
     const backendRequestContext = createBackendRequestContext(pageWindow);
-    const sidebarFreshness = installSidebarFreshness(pageWindow, originalFetch, backendRequestContext, refreshCurrentConversation);
+    const sidebarFreshness = installSidebarFreshness(pageWindow, originalFetch, backendRequestContext);
     const deliveryVerifier = installDeliveryVerifier(pageWindow);
     const cache = new Map;
     const initialSnapshots = new Map;
@@ -3933,7 +4594,9 @@ html [data-chatgpt-static-code-state="loading"] pre {
           conversationId: currentConversationId(pageWindow),
           messageId: null,
           text: null,
-          hasUserMessage: false
+          hasUserMessage: false,
+          createdAtMs: null,
+          requestedModelSlug: null
         };
         const inspected = mutationKind === "send" ? await inspectOutgoingRequest(input, restoredInit) : fallbackProbe;
         const probe = {
@@ -3941,8 +4604,10 @@ html [data-chatgpt-static-code-state="loading"] pre {
           conversationId: inspected.conversationId ?? fallbackProbe.conversationId
         };
         const trackUserSend = mutationKind === "send" && probe.hasUserMessage;
-        if (trackUserSend)
+        if (trackUserSend) {
+          messageMetadataDisplay?.noteOutgoing(probe);
           deliveryVerifier.begin(probe);
+        }
         const mutationConversationId = mutationKind === "content" ? apiMatch?.conversationId ?? probe.conversationId : probe.conversationId ?? apiMatch?.conversationId ?? currentConversationId(pageWindow);
         if (mutationConversationId && (mutationKind === "send" || mutationKind === "resume")) {
           asyncStatusActivity.set(mutationConversationId, true);
@@ -3950,6 +4615,9 @@ html [data-chatgpt-static-code-state="loading"] pre {
         clearLiveConversationCache(mutationConversationId);
         try {
           const response = await originalFetch(input, restoredInit);
+          if (mutationKind === "send" || mutationKind === "resume") {
+            messageMetadataDisplay?.observeResponse(response);
+          }
           if (trackUserSend) {
             if (response.ok) {
               deliveryVerifier.accepted(probe);
@@ -3979,7 +4647,6 @@ html [data-chatgpt-static-code-state="loading"] pre {
             if (!hadPrevious || previous !== active) {
               invalidateInitialSnapshots(statusConversationId);
             }
-            sidebarFreshness.noteConversationStatus(statusConversationId, statusProbe.value);
           }
         }
         return response;
@@ -4020,7 +4687,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
         requestInitialSnapshotEpoch = initialSnapshotEpoch(apiMatch.conversationId);
         task = inFlight.get(key);
         if (!task) {
-          task = materializeLegacyRequestLazily(pageWindow, originalFetch, input, init, normalizedRawUrl, apiMatch.conversationId, activeMode, settings, createLocalCursor);
+          task = materializeLegacyRequestLazily(pageWindow, originalFetch, input, init, normalizedRawUrl, apiMatch.conversationId, activeMode, settings, createLocalCursor, messageMetadataDisplay?.ingestPayload);
           inFlight.set(key, task);
         }
       } else {
@@ -4082,7 +4749,7 @@ html [data-chatgpt-static-code-state="loading"] pre {
         task = inFlight.get(key);
         if (!task) {
           const responseTask = prepareCompletePaginatedResponse(pageWindow, originalFetch, input, init, rewrittenUrl, apiMatch.kind, apiMatch.conversationId, completeAll);
-          task = responseTask.then((prepared) => materializeAndOptimizePaginated(pageWindow, prepared.response, apiMatch.kind, activeMode, normalizedRawUrl, requestWasClamped, createLocalCursor, prepared.workerJobToken, renderTurns));
+          task = responseTask.then((prepared) => materializeAndOptimizePaginated(pageWindow, prepared.response, apiMatch.kind, activeMode, normalizedRawUrl, requestWasClamped, createLocalCursor, prepared.workerJobToken, renderTurns, messageMetadataDisplay?.ingestPayload));
           inFlight.set(key, task);
         }
       }

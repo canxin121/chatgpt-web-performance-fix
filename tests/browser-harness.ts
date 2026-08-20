@@ -39,6 +39,38 @@ const rateLimitedConversationPath =
   `/backend-api/conversation/${rateLimitedConversationId}`;
 const rateLimitedInitialPath =
   `/backend-api/conversations/${rateLimitedConversationId}`;
+const metadataConversationId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const metadataInitialPath =
+  `/backend-api/conversations/${metadataConversationId}`;
+const metadataUserMessageId = "c0000000-0000-4000-8000-000000000001";
+const metadataAssistantMessageId = "c0000000-0000-4000-8000-000000000002";
+const metadataUserCreateTime = 1_787_244_123.456;
+const metadataAssistantCreateTime = 1_787_244_130.789;
+const metadataMessages: ConversationMessage[] = [
+  {
+    id: metadataUserMessageId,
+    author: { role: "user" },
+    content: { content_type: "text", parts: ["metadata display question"] },
+    create_time: metadataUserCreateTime,
+    update_time: null,
+    status: "finished_successfully",
+  },
+  {
+    id: metadataAssistantMessageId,
+    author: { role: "assistant" },
+    content: { content_type: "text", parts: ["metadata display answer"] },
+    create_time: metadataAssistantCreateTime,
+    update_time: null,
+    status: "finished_successfully",
+    recipient: "all",
+    channel: "final",
+    metadata: {
+      resolved_model_slug: "gpt-5-6-thinking",
+      model_slug: "gpt-5-6-pro",
+      default_model_slug: "gpt-5-6-pro",
+    },
+  },
+];
 const asyncCurrentMessageId = "11111111-1111-4111-8111-111111111112";
 const asyncProgressMessages: ConversationMessage[] = [
   {
@@ -143,6 +175,9 @@ const authSeedPath = "/backend-api/auth-seed";
 const harnessAuthHeader = "Bearer harness-request-context";
 const sentMessageId = "77777777-7777-4777-8777-777777777777";
 const sentMessageText = "browser harness persistence probe";
+const sentMessageCreateTime = 1_787_244_200.125;
+const sentAssistantMessageId = "88888888-8888-4888-8888-888888888888";
+const sentAssistantCreateTime = 1_787_244_202.875;
 const statusHistoryMessages = [
   ...activeTurns.at(-3)!,
   ...activeTurns.at(-2)!,
@@ -171,6 +206,7 @@ let exactManualHistoryGets = 0;
 const exactManualHistoryNumTurns: string[] = [];
 let rateLimitedLegacyGets = 0;
 let rateLimitedInitialGets = 0;
+let metadataInitialGets = 0;
 const rateLimitedInitialNumTurns: string[] = [];
 let sentMessagePersisted = false;
 let sidebarAsyncStatus: unknown = 3;
@@ -226,6 +262,7 @@ function harnessHtml(): string {
       const fallbackEndpoint = ${JSON.stringify(fallbackConversationPath)};
       const emptyEndpoint = ${JSON.stringify(emptyConversationPath)};
       const rateLimitedEndpoint = ${JSON.stringify(rateLimitedConversationPath)};
+      const metadataEndpoint = ${JSON.stringify(metadataInitialPath)};
       const lazyMessagesEndpoint = ${JSON.stringify(lazyMessagesPath)};
       const nativeInitialEndpoint = ${JSON.stringify(nativeInitialPath)};
       const nativeMessagesEndpoint = ${JSON.stringify(nativeMessagesPath)};
@@ -240,6 +277,13 @@ function harnessHtml(): string {
       const harnessAuthHeader = ${JSON.stringify(harnessAuthHeader)};
       const sentProbeMessageId = ${JSON.stringify(sentMessageId)};
       const sentProbeMessageText = ${JSON.stringify(sentMessageText)};
+      const sentProbeCreateTime = ${JSON.stringify(sentMessageCreateTime)};
+      const sentReplyMessageId = ${JSON.stringify(sentAssistantMessageId)};
+      const sentReplyCreateTime = ${JSON.stringify(sentAssistantCreateTime)};
+      const metadataUserId = ${JSON.stringify(metadataUserMessageId)};
+      const metadataAssistantId = ${JSON.stringify(metadataAssistantMessageId)};
+      const metadataUserTime = ${JSON.stringify(metadataUserCreateTime)};
+      const metadataAssistantTime = ${JSON.stringify(metadataAssistantCreateTime)};
       const expectedCurrentNode = ${JSON.stringify(payload.current_node)};
 
       function visibleTranscriptRoles(messages) {
@@ -1193,32 +1237,116 @@ function harnessHtml(): string {
         for (const observer of richResizeObservers) observer.disconnect();
         normalResizeObserver.disconnect();
 
+        const metadataResponse = await fetch(
+          metadataEndpoint + "?include_has_versions=true&num_turns=2",
+        );
+        const metadataPayload = await metadataResponse.json();
+        const metadataStatsBeforeMount = await fetch("/stats").then(
+          (response) => response.json(),
+        );
+        const metadataUserTurn = document.createElement("section");
+        metadataUserTurn.dataset.turn = "user";
+        metadataUserTurn.dataset.testid = "conversation-turn-metadata-user";
+        const metadataUserElement = document.createElement("div");
+        metadataUserElement.dataset.messageAuthorRole = "user";
+        metadataUserElement.dataset.messageId = metadataUserId;
+        metadataUserElement.textContent = "metadata display question";
+        metadataUserTurn.append(metadataUserElement);
+
+        const metadataAssistantTurn = document.createElement("section");
+        metadataAssistantTurn.dataset.turn = "assistant";
+        metadataAssistantTurn.dataset.testid = "conversation-turn-metadata-assistant";
+        const metadataAssistantElement = document.createElement("div");
+        metadataAssistantElement.dataset.messageAuthorRole = "assistant";
+        metadataAssistantElement.dataset.messageId = metadataAssistantId;
+        metadataAssistantElement.textContent = "metadata display answer";
+        metadataAssistantTurn.append(metadataAssistantElement);
+        document.body.append(metadataUserTurn, metadataAssistantTurn);
+        await new Promise((resolve) => setTimeout(resolve, 80));
+
+        const metadataUserBadge = metadataUserElement.querySelector(
+          '[data-chatgpt-message-metadata="true"]',
+        );
+        const metadataAssistantBadge = metadataAssistantElement.querySelector(
+          '[data-chatgpt-message-metadata="true"]',
+        );
+        const historicalMessageMetadataRendered =
+          metadataPayload.messages?.length === 2 &&
+          metadataUserBadge instanceof HTMLElement &&
+          metadataAssistantBadge instanceof HTMLElement;
+        const historicalTimestampUsesServerCreateTime =
+          metadataUserBadge?.querySelector("time")?.dateTime ===
+            new Date(metadataUserTime * 1000).toISOString() &&
+          metadataAssistantBadge?.querySelector("time")?.dateTime ===
+            new Date(metadataAssistantTime * 1000).toISOString() &&
+          metadataUserBadge?.getAttribute(
+            "data-chatgpt-message-metadata-time-source",
+          ) === "server";
+        const resolvedModelPreferred =
+          metadataAssistantBadge
+            ?.querySelector("[data-chatgpt-message-model]")
+            ?.getAttribute("data-chatgpt-message-model") === "gpt-5-6-thinking" &&
+          metadataAssistantBadge?.textContent?.includes("GPT-5.6 Thinking") === true &&
+          metadataAssistantBadge?.getAttribute(
+            "data-chatgpt-message-metadata-model-source",
+          ) === "resolved";
+        const userModelInferredFromReply =
+          metadataUserBadge
+            ?.querySelector("[data-chatgpt-message-model]")
+            ?.getAttribute("data-chatgpt-message-model") === "gpt-5-6-thinking" &&
+          metadataUserBadge?.getAttribute(
+            "data-chatgpt-message-metadata-model-source",
+          ) === "inferred";
+        const metadataPlacementMatchesRole =
+          metadataUserBadge?.getAttribute("data-chatgpt-message-metadata-role") ===
+            "user" &&
+          metadataAssistantBadge?.getAttribute(
+            "data-chatgpt-message-metadata-role",
+          ) === "assistant" &&
+          metadataUserBadge?.parentElement === metadataUserElement &&
+          metadataAssistantBadge?.parentElement === metadataAssistantElement;
+        const metadataStyleInstalled = Boolean(
+          document.querySelector("#chatgpt-message-metadata-style"),
+        );
+        const metadataMenuExists = (window.__gmMenuCommands ?? []).some(
+          (command) => command.label === "隐藏消息时间与模型",
+        );
+        const metadataStatsAfterMount = await fetch("/stats").then(
+          (response) => response.json(),
+        );
+        const metadataDomMountMadeNoRequests =
+          metadataStatsAfterMount.metadataInitialGets ===
+          metadataStatsBeforeMount.metadataInitialGets;
+
         await new Promise((resolve) => setTimeout(resolve, 80));
         const sidebarRefreshButton = document.querySelector(
           '[data-chatgpt-sidebar-refresh-button="true"]',
         );
         const sidebarRefreshButtonExists =
           sidebarRefreshButton instanceof HTMLButtonElement;
-        const conversationRefreshButton = document.querySelector(
-          '[data-chatgpt-conversation-refresh-button="true"]',
+        const sidebarRefreshStyleInstalled = Boolean(
+          document.querySelector("#chatgpt-sidebar-refresh-style"),
         );
-        const conversationRefreshButtonExists =
-          conversationRefreshButton instanceof HTMLButtonElement;
-        const manualConversationRefreshesBefore = Number(
-          document.documentElement.dataset.chatgptManualConversationRefreshes ?? "0",
+        const sidebarRefreshUsesIconAndText =
+          sidebarRefreshButton instanceof HTMLButtonElement &&
+          Boolean(sidebarRefreshButton.querySelector("[data-chatgpt-refresh-icon] svg")) &&
+          Boolean(
+            sidebarRefreshButton
+              .querySelector("[data-chatgpt-refresh-label]")
+              ?.textContent?.trim(),
+          );
+        const sidebarOnlyHasRefreshButton =
+          document.querySelectorAll(
+            '[data-chatgpt-sidebar-refresh-control="true"] button',
+          ).length === 1;
+        const conversationRefreshUiRemoved =
+          !document.querySelector(
+            '[data-chatgpt-conversation-refresh-button="true"], [data-chatgpt-conversation-refresh-control="true"]',
+          ) &&
+          document.documentElement.dataset.chatgptConversationRefreshPlacement == null;
+        const conversationRefreshMenuRemoved = !(window.__gmMenuCommands ?? []).some(
+          (command) => command.label === "刷新当前会话",
         );
-        window.addEventListener(
-          "chatgpt-performance-fix:manual-conversation-refresh",
-          (event) => event.preventDefault(),
-          { once: true },
-        );
-        if (conversationRefreshButton instanceof HTMLButtonElement) {
-          conversationRefreshButton.click();
-        }
-        const conversationManualRefreshTriggered =
-          Number(
-            document.documentElement.dataset.chatgptManualConversationRefreshes ?? "0",
-          ) === manualConversationRefreshesBefore + 1;
         const sidebarStatsBeforeManualRefresh = await fetch("/stats").then(
           (response) => response.json(),
         );
@@ -1234,12 +1362,15 @@ function harnessHtml(): string {
             sidebarStatsBeforeManualRefresh.authenticatedSidebarListProbeGets + 1 &&
           sidebarStatsAfterManualRefresh.authenticatedSidebarDetailProbeGets ===
             sidebarStatsBeforeManualRefresh.authenticatedSidebarDetailProbeGets + 1;
+        const sidebarRefreshIconPreserved = Boolean(
+          sidebarRefreshButton?.querySelector("[data-chatgpt-refresh-icon] svg"),
+        );
         const sidebarAnchor = document.querySelector("#sidebar-conversation");
         const sidebarTitleFresh =
           sidebarAnchor?.querySelector(".truncate")?.textContent === "fresh sidebar title";
-        const sidebarRunningBadge = Boolean(
-          sidebarAnchor?.querySelector('[data-chatgpt-sidebar-sync-status="true"]'),
-        );
+        const sidebarHasNoCustomStatusDisplay =
+          !sidebarAnchor?.querySelector('[data-chatgpt-sidebar-sync-status="true"]') &&
+          !sidebarAnchor?.hasAttribute("data-chatgpt-async-active");
 
         await fetch(sendEndpoint, {
           method: "POST",
@@ -1276,6 +1407,8 @@ function harnessHtml(): string {
                 id: sentProbeMessageId,
                 author: { role: "user" },
                 content: { content_type: "text", parts: [sentProbeMessageText] },
+                create_time: sentProbeCreateTime,
+                metadata: { requested_model_slug: "gpt-5-6-pro" },
               },
             ],
           }),
@@ -1298,6 +1431,14 @@ function harnessHtml(): string {
             ?.getAttribute("data-chatgpt-delivery-stage") === "sent" &&
           document.documentElement.dataset.chatgptLastSendVerified === "true" &&
           !sentMessageElement.querySelector(".chatgpt-delivery-spinner");
+        const outgoingMetadataBadge = sentMessageElement.querySelector(
+          '[data-chatgpt-message-metadata="true"]',
+        );
+        const outgoingMetadataRendered =
+          outgoingMetadataBadge?.querySelector("time")?.dateTime ===
+            new Date(sentProbeCreateTime * 1000).toISOString() &&
+          outgoingMetadataBadge?.querySelector("[data-chatgpt-message-model]")
+            ?.getAttribute("data-chatgpt-message-model") === "gpt-5-6-thinking";
 
         const assistantReplyTurn = document.createElement("section");
         assistantReplyTurn.dataset.turn = "assistant";
@@ -1309,6 +1450,15 @@ function harnessHtml(): string {
         assistantReplyTurn.append(assistantReplyElement);
         document.body.append(assistantReplyTurn);
         await new Promise((resolve) => setTimeout(resolve, 20));
+        const outgoingMetadataServerCorrected =
+          sentMessageElement
+            .querySelector('[data-chatgpt-message-metadata="true"]')
+            ?.getAttribute("data-chatgpt-message-metadata-time-source") === "server" &&
+          sentMessageElement
+            .querySelector('[data-chatgpt-message-metadata="true"]')
+            ?.getAttribute("data-chatgpt-message-metadata-model-source") === "inferred" &&
+          sentMessageElement
+            .querySelector('[data-chatgpt-message-model="gpt-5-6-thinking"]') != null;
         const replyStartConfirmedSend =
           document.documentElement.dataset.chatgptLastSendVerified === "true" &&
           document.documentElement.dataset.chatgptLastSendEvidence === "assistant-turn" &&
@@ -1350,9 +1500,9 @@ function harnessHtml(): string {
           body: JSON.stringify({ status: 4 }),
         });
         await new Promise((resolve) => setTimeout(resolve, 180));
-        const sidebarCompletedBadgeRemoved = !sidebarAnchor?.querySelector(
-          '[data-chatgpt-sidebar-sync-status="true"]',
-        );
+        const sidebarStillHasNoCustomStatusDisplay =
+          !sidebarAnchor?.querySelector('[data-chatgpt-sidebar-sync-status="true"]') &&
+          !sidebarAnchor?.hasAttribute("data-chatgpt-async-active");
 
         const afterMutation = await fetch("/stats").then((response) => response.json());
         const jsonWorkerParses = Number(
@@ -1483,14 +1633,27 @@ function harnessHtml(): string {
           statusMutationPreservedLocalCursor,
           statusHistoryMessagesGets: afterMutation.statusHistoryMessagesGets,
           statusMutationPosts: afterMutation.statusMutationPosts,
+          historicalMessageMetadataRendered,
+          historicalTimestampUsesServerCreateTime,
+          resolvedModelPreferred,
+          userModelInferredFromReply,
+          metadataPlacementMatchesRole,
+          metadataStyleInstalled,
+          metadataMenuExists,
+          metadataDomMountMadeNoRequests,
+          metadataInitialGets: afterMutation.metadataInitialGets,
           backendRequestContextCaptured,
           noAutomaticSidebarRequests,
           idleSidebarDetailDidNotRepeat,
           idleSidebarListDidNotRepeatAtLegacyCadence,
           sidebarRefreshButtonExists,
+          sidebarRefreshStyleInstalled,
+          sidebarRefreshUsesIconAndText,
+          sidebarOnlyHasRefreshButton,
+          conversationRefreshUiRemoved,
+          conversationRefreshMenuRemoved,
+          sidebarRefreshIconPreserved,
           sidebarManualRefreshTriggered,
-          conversationRefreshButtonExists,
-          conversationManualRefreshTriggered,
           authenticatedSidebarListProbeUsed:
             afterMutation.authenticatedSidebarListProbeGets > 0,
           authenticatedSidebarDetailProbeUsed:
@@ -1500,8 +1663,8 @@ function harnessHtml(): string {
             afterMutation.deliveryIncludeMessageIds.length === 0,
           unauthorizedProbeGets: afterMutation.unauthorizedProbeGets,
           sidebarTitleFresh,
-          sidebarRunningBadge,
-          sidebarCompletedBadgeRemoved,
+          sidebarHasNoCustomStatusDisplay,
+          sidebarStillHasNoCustomStatusDisplay,
           sidebarListRefreshed: afterMutation.sidebarListGets >= 1,
           backgroundSendDidNotShowStatus,
           inlineSendingStatus,
@@ -1511,6 +1674,8 @@ function harnessHtml(): string {
           resumeDidNotRestartVerifier,
           sendVerified,
           deliveryIndicatorConfirmed,
+          outgoingMetadataRendered,
+          outgoingMetadataServerCorrected,
           sendPosts: afterMutation.sendPosts,
           resumePosts: afterMutation.resumePosts,
           tunedPaginationRootMargin,
@@ -1685,6 +1850,19 @@ const server = Bun.serve({
         },
       });
     }
+    if (url.pathname === metadataInitialPath && request.method === "GET") {
+      metadataInitialGets += 1;
+      return jsonNoStore({
+        title: "message metadata harness",
+        conversation_id: metadataConversationId,
+        current_node: metadataAssistantMessageId,
+        async_status: null,
+        messages: metadataMessages,
+        page_info: { has_previous_page: false, start_cursor: null },
+        safe_urls: [],
+        blocked_urls: [],
+      });
+    }
     if (url.pathname === "/backend-api/conversations" && request.method === "GET") {
       if (!hasHarnessAuth) {
         unauthorizedProbeGets += 1;
@@ -1732,6 +1910,25 @@ const server = Bun.serve({
       if (hasUserMessage) {
         await Bun.sleep(80);
         sentMessagePersisted = true;
+        return jsonNoStore({
+          messages: [
+            {
+              id: sentMessageId,
+              author: { role: "user" },
+              content: { content_type: "text", parts: [sentMessageText] },
+              create_time: sentMessageCreateTime,
+            },
+            {
+              id: sentAssistantMessageId,
+              author: { role: "assistant" },
+              content: { content_type: "text", parts: ["streaming reply started"] },
+              create_time: sentAssistantCreateTime,
+              recipient: "all",
+              channel: "final",
+              metadata: { resolved_model_slug: "gpt-5-6-thinking" },
+            },
+          ],
+        });
       }
       return jsonNoStore({ ok: true });
     }
@@ -2089,6 +2286,7 @@ const server = Bun.serve({
         rateLimitedLegacyGets,
         rateLimitedInitialGets,
         rateLimitedInitialNumTurns,
+        metadataInitialGets,
         deliveryIncludeMessageIds,
         mutations,
       });
@@ -2374,21 +2572,34 @@ const expected = {
   statusMutationPreservedLocalCursor: true,
   statusHistoryMessagesGets: 1,
   statusMutationPosts: 2,
+  historicalMessageMetadataRendered: true,
+  historicalTimestampUsesServerCreateTime: true,
+  resolvedModelPreferred: true,
+  userModelInferredFromReply: true,
+  metadataPlacementMatchesRole: true,
+  metadataStyleInstalled: true,
+  metadataMenuExists: true,
+  metadataDomMountMadeNoRequests: true,
+  metadataInitialGets: 1,
   backendRequestContextCaptured: true,
   noAutomaticSidebarRequests: true,
   idleSidebarDetailDidNotRepeat: true,
   idleSidebarListDidNotRepeatAtLegacyCadence: true,
   sidebarRefreshButtonExists: true,
+  sidebarRefreshStyleInstalled: true,
+  sidebarRefreshUsesIconAndText: true,
+  sidebarOnlyHasRefreshButton: true,
+  conversationRefreshUiRemoved: true,
+  conversationRefreshMenuRemoved: true,
+  sidebarRefreshIconPreserved: true,
   sidebarManualRefreshTriggered: true,
-  conversationRefreshButtonExists: true,
-  conversationManualRefreshTriggered: true,
   authenticatedSidebarListProbeUsed: true,
   authenticatedSidebarDetailProbeUsed: true,
   noDeliveryPolling: true,
   unauthorizedProbeGets: 0,
   sidebarTitleFresh: true,
-  sidebarRunningBadge: true,
-  sidebarCompletedBadgeRemoved: true,
+  sidebarHasNoCustomStatusDisplay: true,
+  sidebarStillHasNoCustomStatusDisplay: true,
   sidebarListRefreshed: true,
   backgroundSendDidNotShowStatus: true,
   inlineSendingStatus: true,
@@ -2398,6 +2609,8 @@ const expected = {
   resumeDidNotRestartVerifier: true,
   sendVerified: true,
   deliveryIndicatorConfirmed: true,
+  outgoingMetadataRendered: true,
+  outgoingMetadataServerCorrected: true,
   sendPosts: 2,
   resumePosts: 1,
   tunedPaginationRootMargin: "80px 0px 0px 0px",
