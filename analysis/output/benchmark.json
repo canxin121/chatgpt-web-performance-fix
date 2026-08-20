@@ -1,0 +1,66 @@
+{
+  "environment": {
+    "bun": "1.3.14",
+    "platform": "darwin",
+    "arch": "arm64",
+    "iterations": 30
+  },
+  "capture": {
+    "originalBytes": 11398475,
+    "optimizedBytes": 301583,
+    "byteReductionPercent": 97.35418115142596,
+    "changed": true,
+    "reason": "optimized",
+    "originalNodes": 5405,
+    "activePathNodes": 3720,
+    "keptNodes": 137,
+    "removedOffPathNodes": 1685,
+    "removedHistoricNodes": 3583,
+    "userTurns": 16,
+    "recentFullTurns": 1,
+    "removedByKind": {
+      "assistant/thoughts": 100,
+      "assistant/code": 1761,
+      "tool/text": 61,
+      "tool/code": 1652,
+      "tool/execution_output": 9
+    }
+  },
+  "timings": {
+    "parseOriginal": {
+      "minMs": 23.261459000000002,
+      "medianMs": 31.294166000000132,
+      "meanMs": 31.37684720000001,
+      "p95Ms": 36.327792000000045,
+      "maxMs": 38.264999999999986
+    },
+    "parseOptimized": {
+      "minMs": 0.45087499999999636,
+      "medianMs": 0.6950000000001637,
+      "meanMs": 0.6958014333333419,
+      "p95Ms": 1.144249999999829,
+      "maxMs": 1.3552079999999478
+    },
+    "hydrateOriginal": {
+      "minMs": 1.4314580000000205,
+      "medianMs": 3.451917000000094,
+      "meanMs": 3.806129133333328,
+      "p95Ms": 8.039375000000064,
+      "maxMs": 21.02779099999998
+    },
+    "hydrateOptimized": {
+      "minMs": 0.023832999999967797,
+      "medianMs": 0.028291000000081112,
+      "meanMs": 0.030443033333312997,
+      "p95Ms": 0.0360840000000735,
+      "maxMs": 0.07637499999987085
+    },
+    "optimizeAndStringify": {
+      "minMs": 30.297791999999845,
+      "medianMs": 37.39329099999986,
+      "meanMs": 37.88328739999999,
+      "p95Ms": 45.49716700000022,
+      "maxMs": 49.55079100000012
+    }
+  }
+}

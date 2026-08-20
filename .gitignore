@@ -1,0 +1,34 @@
+# Private captures and extracted authenticated/session data.
+.private/
+*.wacz
+*.warc
+*.warc.gz
+*.har
+
+# Credentials and local environment files.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies, caches, and temporary outputs.
+node_modules/
+coverage/
+dist/.build/
+.tmp/
+*.log
+
+# Analysis outputs are ignored by default; only sanitized aggregate reports are tracked.
+analysis/output/*
+!analysis/output/benchmark.json
+!analysis/output/browser-harness.json
+!analysis/output/duplicate-requests.json
+!analysis/output/pagination-analysis.json
+!analysis/output/richtext-analysis.json
+
+# OS/editor files.
+.DS_Store
+*.swp
+.idea/
+.vscode/

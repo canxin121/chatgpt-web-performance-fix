@@ -1,0 +1,51 @@
+{
+  "capture": {
+    "visibleRichMessageCount": 3,
+    "topMessages": [
+      {
+        "role": "assistant",
+        "channel": "final",
+        "chars": 11221,
+        "codeBlocks": 36,
+        "tableLines": 0,
+        "mathMarkers": 0
+      },
+      {
+        "role": "assistant",
+        "channel": "final",
+        "chars": 11955,
+        "codeBlocks": 30,
+        "tableLines": 24,
+        "mathMarkers": 0
+      },
+      {
+        "role": "assistant",
+        "channel": "final",
+        "chars": 3145,
+        "codeBlocks": 7,
+        "tableLines": 0,
+        "mathMarkers": 0
+      }
+    ],
+    "maxCodeBlocksPerVisibleMessage": 36
+  },
+  "frontend": {
+    "smoothedMarkdownSyntheticTickMs": 16,
+    "visibilityStateOnlyControlsSmoothing": true,
+    "perSmoothedCodeBlockResizeObserver": true,
+    "zeroHeightStartingStyle": true,
+    "editorPaneMountedForInlineCode": true,
+    "editorCreatesStateAndView": true
+  },
+  "fix": {
+    "bypassSyntheticMarkdownSmoothing": true,
+    "removeSmoothedCodeHeightAnimation": true,
+    "skipSmoothedCodeResizeObservers": true,
+    "richBlockContentVisibility": true,
+    "proactiveWarmDistancePx": 8000,
+    "warmTrigger": "requestAnimationFrame-distance-scan",
+    "codeMirrorActivationsPerAnimationFrame": 1,
+    "ordinaryRichBlockActivationsPerAnimationFrame": 3,
+    "warmedBlocksStayMaterialized": true
+  }
+}

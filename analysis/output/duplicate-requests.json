@@ -1,0 +1,28 @@
+{
+  "requestCount": 4,
+  "pageCaptureCount": 2,
+  "requestsPerPageCounts": [
+    2,
+    2
+  ],
+  "mappingIdentical": true,
+  "stablePayloadIdentical": true,
+  "safeUrlSetIdentical": true,
+  "blockedUrlSetIdentical": true,
+  "bodyBytes": [
+    11398475
+  ],
+  "mappingNodes": [
+    5405
+  ],
+  "safeUrlCounts": [
+    82
+  ],
+  "blockedUrlCounts": [
+    0
+  ],
+  "compressedBytesRange": {
+    "min": 1264915,
+    "max": 1265006
+  }
+}

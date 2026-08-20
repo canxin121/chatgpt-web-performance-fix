@@ -1,0 +1,72 @@
+{
+  "trueLazyInitial": {
+    "legacyFullBytesAvoided": 11398475,
+    "legacyFullMappingNodesAvoided": 5405,
+    "nativeRequestedTurns": 2,
+    "serverMessagesInLatestTurn": 53,
+    "keptInitialMessages": 4,
+    "lazyEnvelopeMappingNodes": 5,
+    "lazyCursorPreserved": true,
+    "currentNodePreserved": true
+  },
+  "historicalHeavyTurn": {
+    "changed": true,
+    "originalMessages": 773,
+    "keptMessages": 2,
+    "removedMessages": 771,
+    "originalBytes": 1399888,
+    "keptBytes": 20444,
+    "userTurns": 1,
+    "recentFullTurns": 0,
+    "removedByKind": {
+      "tool/text": 8,
+      "assistant/thoughts": 10,
+      "assistant/code": 382,
+      "tool/code": 365,
+      "assistant/text": 5,
+      "assistant/reasoning_recap": 1
+    },
+    "byteReductionPercent": 98.53959745351057,
+    "manualTurnPageMessageCounts": [
+      2
+    ]
+  },
+  "initialTwoTurns": {
+    "changed": true,
+    "originalMessages": 618,
+    "keptMessages": 6,
+    "removedMessages": 612,
+    "originalBytes": 1261917,
+    "keptBytes": 50831,
+    "userTurns": 2,
+    "recentFullTurns": 0,
+    "removedByKind": {
+      "assistant/code": 304,
+      "tool/text": 10,
+      "tool/code": 282,
+      "assistant/thoughts": 10,
+      "assistant/text": 5,
+      "assistant/reasoning_recap": 1
+    },
+    "byteReductionPercent": 95.97192208362357,
+    "localPageMessageCounts": [
+      4,
+      2
+    ]
+  },
+  "stockPagination": {
+    "rootMarginTopPx": 80
+  },
+  "balancedFix": {
+    "initialServerNumTurns": 2,
+    "olderServerNumTurns": 2,
+    "historyTrigger": "manual-button",
+    "automaticHistoryOnScroll": false,
+    "localRenderTurns": 1,
+    "historyUnit": "one-user-question-plus-one-ai-answer",
+    "transportWindowStartsAt": 2,
+    "fragmentedTurnCursorCompletion": true,
+    "preserveTurnAtomicity": true,
+    "minimumIdleBudgetMsBeforeCommit": 12
+  }
+}

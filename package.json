@@ -1,0 +1,23 @@
+{
+  "name": "chatgpt-web-performance-fix",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "analyze:wacz": "bun run analysis/inspect-wacz.ts",
+    "analyze:conversation": "bun run analysis/analyze-conversation.ts",
+    "analyze:duplicates": "bun run analysis/analyze-duplicate-requests.ts",
+    "analyze:pagination": "bun run analysis/analyze-pagination.ts",
+    "analyze:richtext": "bun run analysis/analyze-richtext.ts",
+    "benchmark": "bun run bench/benchmark.ts",
+    "test": "bun test",
+    "test:browser": "bun run build && bun run tests/browser-harness.ts",
+    "build": "bun run scripts/build.ts"
+  },
+  "version": "0.1.0",
+  "description": "Tampermonkey userscript for improving ChatGPT long-conversation performance.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/canxin121/chatgpt-web-performance-fix.git"
+  }
+}
