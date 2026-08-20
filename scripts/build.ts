@@ -5,11 +5,15 @@ const VERSION = "0.1.0"; // Keep fixed unless the maintainer explicitly requests
 const header = `// ==UserScript==
 // @name         ChatGPT Performance Fix
 // @name:zh-CN   ChatGPT 性能优化
-// @namespace    local.chatgpt.performance.fix
+// @namespace    https://github.com/canxin121
 // @version      ${VERSION}
 // @description  Improve ChatGPT performance on long conversations.
 // @description:zh-CN 改善 ChatGPT 长会话性能。
-// @author       Local
+// @author       canxin
+// @homepageURL  https://github.com/canxin121/chatgpt-web-performance-fix
+// @supportURL   https://github.com/canxin121/chatgpt-web-performance-fix/issues
+// @updateURL    https://raw.githubusercontent.com/canxin121/chatgpt-web-performance-fix/main/dist/chatgpt-performance-fix.user.js
+// @downloadURL  https://raw.githubusercontent.com/canxin121/chatgpt-web-performance-fix/main/dist/chatgpt-performance-fix.user.js
 // @match        https://chatgpt.com/*
 // @run-at       document-start
 // @grant        unsafeWindow
