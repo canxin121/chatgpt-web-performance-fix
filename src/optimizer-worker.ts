@@ -34,7 +34,10 @@ function parseRequestJson(request: WorkerRequest): any {
   if (request.buffer instanceof ArrayBuffer) {
     return JSON.parse(new TextDecoder().decode(request.buffer));
   }
-  return parseRequestJson(request);
+  if (typeof request.text !== "string") {
+    throw new Error("Worker request is missing JSON text/buffer");
+  }
+  return JSON.parse(request.text);
 }
 
 function isFinishedStatus(status: unknown): boolean {
@@ -280,8 +283,10 @@ function optimizePaginatedPayload(
   payload: PaginatedConversationPayload,
   request: WorkerRequest,
 ) {
-  const active = hasActiveWork(payload);
   const initial = request.apiKind === "paginated-initial";
+  // Historical /messages responses intentionally omit current_node, so a
+  // missing current leaf there is not evidence of an in-flight turn.
+  const active = initial ? hasActiveWork(payload) : false;
   const result = optimizePaginatedConversationPayload(payload, {
     recentFullTurns: initial && active ? request.recentFullTurns ?? 1 : 0,
     forceKeepMessageIds: initial ? requiredInitialMessageIds(payload) : [],

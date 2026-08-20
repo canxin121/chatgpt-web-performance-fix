@@ -391,18 +391,21 @@ cgptperf-<session>-<counter>
 0.1.0 仍包装 ChatGPT 的分页 `IntersectionObserver`，但**不再自动转发任何 `isIntersecting=true` 的 sentinel 回调**。sentinel 附近插入一个：
 
 ```text
-加载更早的一问一答
+加载 N 轮 / 全部加载
 ```
 
 按钮。行为是：
 
 1. 页面打开、滚轮上滑、触摸、键盘、程序化 `scrollTop` 都不会加载历史。
-2. 只有 sentinel 已进入原生 80px 观察范围时按钮可点击。
+2. sentinel 已进入原生 80px 观察范围时按钮可点击；若浏览器遗漏初始 IO entry，但 sentinel 几何位置已经位于滚动容器顶部，按钮也会启用。
 3. 一次点击只放行一次原始分页 callback，并进入 `aria-busy=true`。
 4. 一页历史完成提交后按钮恢复；如果本页还有本地 cursor，下一次点击只读取下一小页。
-5. observer disconnect 时按钮一起移除，不留下悬空控件。
+5. 几何后备只用于按钮可用性和构造一次点击 entry，从不自行调用 callback。
+6. observer disconnect 时按钮一起移除，不留下悬空控件。
 
-Chrome 验证：自动滚动前=0、程序化滚动后=0、真实滚轮后=0、按钮点击后=1。
+另有一个只做 UI reconcile 的 MutationObserver：它没有任何 fetch 路径，只处理 sentinel 和控制条的 DOM 生命周期。即使 React 先 `observe(target)` 后补 `data-testid`、先注册 detached target 后接入 DOM、替换 sentinel，或删除脚本插入的控制条，下一帧都会迁移/恢复按钮。sentinel 识别兼容 exact testid 以及包含稳定 `conversation-pagination-sentinel` 片段的变体。
+
+Chrome 验证：自动滚动前=0、程序化滚动后=0、真实滚轮后=0、按钮点击后=1；后补 testid、detached→connected、控制条被删除三种场景均恢复，且用户点击前 callback 始终为 0。
 
 ### 空闲预算后再提交历史
 
@@ -417,16 +420,20 @@ paint
   → ChatGPT 执行自身 flushSync
 ```
 
-没有 timeout 强制抢占：如果用户还在连续滚动、点击其他控件，历史页宁可继续显示“正在加载”，也会等待有足够 idle budget 后再提交。Chrome 对**纯内存本地历史页**验证了普通 `setTimeout` 用户任务先于历史 response 完成，证明即使没有网络等待也不会马上抢当前交互任务。
+等待有 12ms idle budget，但设置了 250ms 硬上限：正常情况下用户滚动、点击等任务会先执行；长会话如果持续拿不到足够的 idle slice，也不会让一个已完成的网络响应永远停在“正在加载”。Chrome 对**纯内存本地历史页**同时验证了普通 `setTimeout` 用户任务先于历史 response 完成，以及零 idle budget 时会在 250ms 附近强制交付。
 
 这不能删除 ChatGPT 内部的 `flushSync`，但历史提交现在是用户明确点击后、等待 idle budget、一次只提交一个完整一问一答回合。
 
 ### 请求去重和缓存
 
-- 同一首次 URL 的并发请求共用一个 Promise，因此多个旧版 loader 不会重复触发原生初始页网络请求。
-- 合成的 lazy 初始页故意不做 20 秒缓存：服务器可能在一个已完成工具结果之后很快追加最终助手消息，长缓存会隐藏这一过渡。后续顺序读取即使再次联网，也只会请求最新 1 个回合。
-- 请求层旧版缓存仍只用于明确空闲状态；Response 兜底则按完整响应指纹复用优化结果，内容变化时自动重新处理。
-- 会话写请求会清空旧版缓存、本地微页和正在进行的去重状态。
+- 抓包中的 ChatGPT 前端会重复读取当前会话：`session-network-summary.json` 在约 339.5 秒内记录了 17 次旧版会话 GET，后段相同响应的间隔约为 10–22 秒。脚本会把每一次旧版读取改写成 `/backend-api/conversations/{id}?include_has_versions=true&num_turns=2`；旧实现又把合成 lazy 响应标成不可缓存，因此前端的周期重校验会等价地变成用户看到的频繁 `num_turns=2` 网络请求。
+- 同一首次请求的并发调用仍共用一个 Promise。只有 Worker 明确证明 `async_status == null`、没有 `in_progress / streaming / pending` 消息且 `current_node` 已完成的 2xx 结果，才按“接口语义 + 会话 ID + 首屏轮数”保存页面会话级内存快照。旧版改写入口和原生 `paginated-initial` 入口分别缓存。
+- 初始空闲快照没有时间 TTL，最多按 LRU 保留 32 个会话。生成中、流式、异步运行中以及结构未知的响应不保存长期快照；它们只享受并发 Promise 去重，下一次顺序 GET 必须到服务器取得最新回复进度。第一次读到明确完成态后才固定空闲快照，因此完成会话的后台重校验仍全部变成本地 Response clone。
+- 发送消息、编辑会话、恢复流时立即删除对应会话的成功快照；`/async-status` 从 active→inactive 或 inactive→active 时也只失效一次。每个会话有独立请求 epoch，发送前已经在途的旧 GET 即使更晚完成，也不能把过时内容写回快照。状态 POST 不删除本地 `cgptperf-*` 历史微页。
+- `/async-status` 同时支持 JSON 和 form-urlencoded body。旧解析器先用 `URLSearchParams` 读取 JSON 字符串且不抛异常，导致 JSON fallback 永远不可达；现在会按正文格式正确解析状态转换。
+- 脚本不创建任何当前会话定时轮询。运行态允许 ChatGPT 自身已经发起的状态读取穿透，是为了保持回复实时；空闲态、侧边栏和更早历史仍不自动访问网络。点击 **刷新会话** 或浏览器刷新会创建新页面会话并取得一次新快照。
+- 若首次轻量分页请求返回 429，脚本不会立即回退请求旧版全量会话；它按 `Retry-After`（最少 2 分钟）暂存该 429，退避期内的重复读取也只克隆本地响应。
+- 历史 cursor 页仍使用独立的 5 分钟短期缓存，而且只有手动历史按钮可以开始服务器请求。Response 兜底则按完整响应指纹复用优化结果，内容变化时自动重新处理。
 - 重建 Response 时保留 status、headers、`url`、`redirected` 和 `type`。
 
 ### 消息本体保持真实，只有富文本子块预热
@@ -453,8 +460,8 @@ paint
 - 原生请求带 `include_message_id` 时完全绕过。
 - 正在生成或异步执行时完整保留最新回合；完成态只保留可见内容、`current_node` 及当前工具结果所需的直接调用依赖。
 - 本地微页保持消息顺序，最终恢复原始服务器 cursor。
-- 合成 lazy 初始页和正在运行异步任务的会话都不做 20 秒短期缓存。
-- 页面菜单可“完整加载当前会话一次”。
+- 合成 lazy 初始页只有在明确完成时才使用页面会话级只读快照；正在运行的异步任务不进入成功快照，后续顺序读取可取得最新进度。
+- 侧边栏和页面菜单都提供“刷新当前会话”；页面菜单也可“完整加载当前会话一次”。
 - 可在 `balanced`、`aggressive` 和 `off` 间切换。
 - 不增加第三方网络目标，不上传数据。
 
@@ -538,9 +545,14 @@ analysis/output/richtext-analysis.json
   "fallbackKeptNodes": 35,
   "firstNodes": 5,
   "lazyInitialVisibleRoles": ["user", "assistant"],
-  "nativeInitialVisibleRoles": ["user", "assistant"],
+  "nativeInitialVisibleRoles": ["user", "assistant", "user", "assistant"],
   "lazyPaginationEnabled": true,
   "legacyFullGetsBeforeMutation": 0,
+  "postMutationSnapshotRefreshed": true,
+  "activeSequentialProgressFresh": true,
+  "activeResponsesNotSnapshotted": true,
+  "completedActiveConversationPinned": true,
+  "asyncSequentialNetworkGets": 3,
   "lazyOlderMessages": 2,
   "lazyOlderRoles": ["user", "assistant"],
   "lazyOlderAnswerChannel": "final",
@@ -561,7 +573,11 @@ analysis/output/richtext-analysis.json
   "paginationCallsAfterProgrammaticScroll": 0,
   "paginationCallsAfterUserScroll": 0,
   "paginationCallsAfterManualClick": 1,
-  "manualHistoryClicks": 1,
+  "missingInitialEntryUsesManualFallback": true,
+  "lateIdButtonAppeared": true,
+  "removedControlWasRestored": true,
+  "detachedControlAppearedAfterConnect": true,
+  "manualHistoryClicks": 8,
   "richMessageContentVisibility": "visible",
   "richPrewarmEditorState": "hot",
   "richPrewarmEditorTop": 2200,
@@ -585,7 +601,7 @@ analysis/output/richtext-analysis.json
 - 普通富文本块预热距离为 8000px，CodeMirror 单独收紧到 3000px；冷态 CodeMirror 的 IO/RO 原生 observe 均保持不变，切 hot 后才各增加一次。
 - 页面发起旧版 URL 时成功改道到原生初始分页，旧版全量 GET 为 0。
 - 首次接口被故意切成回合末尾碎片后，脚本仍补齐到可见 `[user, assistant]`；录制样本最终 mapping 5 节点，其中 2 个不可见节点只为保留 current tool state。
-- 首次传输窗口从 `num_turns=2` 开始；若仍只是 turn 碎片，会沿 cursor 补齐当前回合。合成初始页仍不长缓存，避免遮住服务器随后补出的 final。
+- 首次传输窗口从 `num_turns=2` 开始；若仍只是 turn 碎片，会沿 cursor 补齐当前回合。明确完成的响应固定为本页面会话的内存快照；运行态响应不固定，下一次顺序读取可获得新的服务端进度。
 - 即使调用脚本注入前保存的原生 fetch，`Response.json()` / `Response.text()` 兜底仍将 5,405 节点压到 35；三次真实网络响应只优化一次，后两次命中指纹缓存。
 - 跨 Realm `Request` URL 重写正确。
 - 首次和历史网络都从 `num_turns=2` 起步；碎片压力测试会继续用 4 等更大窗口补齐同一回合，而不是把单条碎片交付 UI。
@@ -594,9 +610,11 @@ analysis/output/richtext-analysis.json
 - 最后一回合恢复服务器 cursor。
 - 消息总顺序不变。
 - 历史响应在浏览器绘制后继续等待 `requestIdleCallback` 至少 12ms 空闲预算；纯内存微页也确认普通用户 task 先执行。
-- 分页观察器保留原生 80px rootMargin，但所有自动 `isIntersecting=true` 回调都被拦截。页面打开、程序化滚动和真实滚轮后 callback 都保持 0；只有“加载更早的一问一答”按钮点击后才变为 1。
+- 分页观察器保留原生 80px rootMargin，但所有自动 `isIntersecting=true` 回调都被拦截。页面打开、程序化滚动和真实滚轮后 callback 都保持 0；只有“加载 N 轮”按钮点击后才变为 1。浏览器还覆盖了初始 entry 缺失、后补 testid、detached sentinel 接入和控制条被 React 删除后的恢复。
 - 按钮加载时 `aria-busy=true`，历史提交完成后恢复，下一次点击才继续下一本地/服务器微页。
-- Response 元数据、缓存失效和异步会话行为正确。
+- 空闲会话的并发两次和随后顺序重校验共用同一次服务器初始读取，一小时后仍命中本地快照；transcript mutation 后服务器计数增加到 2，并返回新的 revision，证明旧快照已失效。运行中异步会话前两次读取分别返回 progress 1 与 progress 2，第三次网络读取返回完成态；第四次客户端读取命中刚建立的完成快照，服务器计数保持 3。这同时证明实时进度没有被缓存吞掉，完成后也不会继续穿透网络。
+- 429 压力用例中，两次客户端读取都得到 429，但轻量初始接口服务器计数为 1、旧版全量接口为 0，第二次响应带 `x-chatgpt-performance-fix-initial-snapshot: rate-limit-backoff`。
+- Response 元数据、手动刷新按钮、缓存隔离和异步会话行为正确。
 
 完整结果：
 

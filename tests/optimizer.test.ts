@@ -205,7 +205,7 @@ describe("optimizer safety guards", () => {
 });
 
 describe("legacy emergency optimizer", () => {
-  test("keeps only user and current dependency nodes when a live turn has no visible AI text", () => {
+  test("keeps the structural root, user, and current dependency nodes when a live turn has no visible AI text", () => {
     const payload: ConversationPayload = {
       current_node: "tool-result",
       mapping: {
@@ -283,6 +283,7 @@ describe("legacy emergency optimizer", () => {
     });
 
     expect(Object.keys(result.payload.mapping ?? {})).toEqual([
+      "root",
       "user",
       "tool-call",
       "tool-result",

@@ -26,7 +26,7 @@ const conversationPath = `/backend-api/conversation/${conversationId}`;
 const lazyInitialPath = `/backend-api/conversations/${conversationId}`;
 const lazyMessagesPath = `${lazyInitialPath}/messages`;
 const asyncConversationPath =
-  "/backend-api/conversation/11111111-1111-4111-8111-111111111111";
+  "/backend-api/conversations/11111111-1111-4111-8111-111111111111";
 const fallbackConversationId = "55555555-5555-4555-8555-555555555555";
 const fallbackConversationPath =
   `/backend-api/conversation/${fallbackConversationId}`;
@@ -34,11 +34,28 @@ const emptyConversationId = "44444444-4444-4444-8444-444444444444";
 const emptyConversationPath = `/backend-api/conversation/${emptyConversationId}`;
 const emptyInitialPath = `/backend-api/conversations/${emptyConversationId}`;
 const emptyMessagesPath = `${emptyInitialPath}/messages`;
-const asyncConversationText = JSON.stringify({
-  ...payload,
-  conversation_id: "11111111-1111-4111-8111-111111111111",
-  async_status: { status: "running" },
-});
+const rateLimitedConversationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const rateLimitedConversationPath =
+  `/backend-api/conversation/${rateLimitedConversationId}`;
+const rateLimitedInitialPath =
+  `/backend-api/conversations/${rateLimitedConversationId}`;
+const asyncCurrentMessageId = "11111111-1111-4111-8111-111111111112";
+const asyncProgressMessages: ConversationMessage[] = [
+  {
+    id: "11111111-1111-4111-8111-111111111111",
+    author: { role: "user" },
+    content: { content_type: "text", parts: ["active progress question"] },
+    status: "finished_successfully",
+  },
+  {
+    id: asyncCurrentMessageId,
+    author: { role: "assistant" },
+    content: { content_type: "text", parts: ["active progress 0"] },
+    status: "in_progress",
+    recipient: "all",
+    channel: "final",
+  },
+];
 const fallbackConversationText = JSON.stringify({
   ...payload,
   conversation_id: fallbackConversationId,
@@ -81,6 +98,55 @@ const nativeRichMessages = activeTurns.toSorted(
 )[0]!;
 const richConversationId = "55555555-5555-4555-8555-555555555555";
 const richMessagesPath = `/backend-api/conversations/${richConversationId}/messages`;
+const statusHistoryConversationId = "66666666-6666-4666-8666-666666666666";
+const statusHistoryMessagesPath =
+  `/backend-api/conversations/${statusHistoryConversationId}/messages`;
+const statusHistoryAsyncPath =
+  `/backend-api/conversation/${statusHistoryConversationId}/async-status`;
+const exactManualConversationId = "99999999-9999-4999-8999-999999999999";
+const exactManualMessagesPath =
+  `/backend-api/conversations/${exactManualConversationId}/messages`;
+const exactManualMessages: ConversationMessage[] = [
+  {
+    id: "90000000-0000-4000-8000-000000000001",
+    author: { role: "user" },
+    content: { content_type: "text", parts: ["exact manual question one"] },
+    status: "finished_successfully",
+  },
+  {
+    id: "90000000-0000-4000-8000-000000000002",
+    author: { role: "assistant" },
+    content: { content_type: "text", parts: ["exact manual answer one"] },
+    status: "finished_successfully",
+    recipient: "all",
+    channel: "final",
+  },
+  {
+    id: "90000000-0000-4000-8000-000000000003",
+    author: { role: "user" },
+    content: { content_type: "text", parts: ["exact manual question two"] },
+    status: "finished_successfully",
+  },
+  {
+    id: "90000000-0000-4000-8000-000000000004",
+    author: { role: "assistant" },
+    content: { content_type: "text", parts: ["exact manual answer two"] },
+    status: "finished_successfully",
+    recipient: "all",
+    channel: "final",
+  },
+];
+const currentAsyncStatusPath = `/backend-api/conversation/${conversationId}/async-status`;
+const sendPath = "/backend-api/f/conversation";
+const resumePath = "/backend-api/f/conversation/resume";
+const authSeedPath = "/backend-api/auth-seed";
+const harnessAuthHeader = "Bearer harness-request-context";
+const sentMessageId = "77777777-7777-4777-8777-777777777777";
+const sentMessageText = "browser harness persistence probe";
+const statusHistoryMessages = [
+  ...activeTurns.at(-3)!,
+  ...activeTurns.at(-2)!,
+];
 let conversationGets = 0;
 let asyncConversationGets = 0;
 let fallbackLegacyGets = 0;
@@ -92,6 +158,23 @@ let lazyMessagesGets = 0;
 let nativeInitialGets = 0;
 let nativeMessagesGets = 0;
 let richMessagesGets = 0;
+let statusHistoryMessagesGets = 0;
+let statusMutationPosts = 0;
+let sidebarListGets = 0;
+let sendPosts = 0;
+let resumePosts = 0;
+let unauthorizedProbeGets = 0;
+let authenticatedSidebarListProbeGets = 0;
+let authenticatedSidebarDetailProbeGets = 0;
+let authenticatedPersistenceProbeGets = 0;
+let exactManualHistoryGets = 0;
+const exactManualHistoryNumTurns: string[] = [];
+let rateLimitedLegacyGets = 0;
+let rateLimitedInitialGets = 0;
+const rateLimitedInitialNumTurns: string[] = [];
+let sentMessagePersisted = false;
+let sidebarAsyncStatus: unknown = 3;
+const deliveryIncludeMessageIds: string[] = [];
 const lazyInitialNumTurns: string[] = [];
 const lazyMessagesNumTurns: string[] = [];
 const nativeInitialNumTurns: string[] = [];
@@ -108,6 +191,11 @@ function harnessHtml(): string {
       window.__capturedNativeFetch = window.fetch.bind(window);
       window.__richNativeResizeObserveCalls = 0;
       window.__richNativeIntersectionObserveCalls = 0;
+      window.__gmMenuCommands = [];
+      window.GM_registerMenuCommand = (label, callback) => {
+        window.__gmMenuCommands.push({ label, callback });
+        return label;
+      };
       const HarnessNativeIntersectionObserver = window.IntersectionObserver;
       window.IntersectionObserver = class HarnessCountingIntersectionObserver extends HarnessNativeIntersectionObserver {
         observe(target) {
@@ -126,16 +214,32 @@ function harnessHtml(): string {
     <script src="/userscript.js"></script>
   </head>
   <body>
+    <nav id="sidebar-harness">
+      <a id="sidebar-conversation" href="/c/${conversationId}">
+        <span class="truncate">stale sidebar title</span>
+      </a>
+    </nav>
     <pre id="status">running</pre>
     <script type="module">
       const endpoint = ${JSON.stringify(conversationPath)};
       const asyncEndpoint = ${JSON.stringify(asyncConversationPath)};
       const fallbackEndpoint = ${JSON.stringify(fallbackConversationPath)};
       const emptyEndpoint = ${JSON.stringify(emptyConversationPath)};
+      const rateLimitedEndpoint = ${JSON.stringify(rateLimitedConversationPath)};
       const lazyMessagesEndpoint = ${JSON.stringify(lazyMessagesPath)};
       const nativeInitialEndpoint = ${JSON.stringify(nativeInitialPath)};
       const nativeMessagesEndpoint = ${JSON.stringify(nativeMessagesPath)};
       const richMessagesEndpoint = ${JSON.stringify(richMessagesPath)};
+      const statusHistoryMessagesEndpoint = ${JSON.stringify(statusHistoryMessagesPath)};
+      const statusHistoryAsyncEndpoint = ${JSON.stringify(statusHistoryAsyncPath)};
+      const exactManualMessagesEndpoint = ${JSON.stringify(exactManualMessagesPath)};
+      const currentAsyncStatusEndpoint = ${JSON.stringify(currentAsyncStatusPath)};
+      const sendEndpoint = ${JSON.stringify(sendPath)};
+      const resumeEndpoint = ${JSON.stringify(resumePath)};
+      const authSeedEndpoint = ${JSON.stringify(authSeedPath)};
+      const harnessAuthHeader = ${JSON.stringify(harnessAuthHeader)};
+      const sentProbeMessageId = ${JSON.stringify(sentMessageId)};
+      const sentProbeMessageText = ${JSON.stringify(sentMessageText)};
       const expectedCurrentNode = ${JSON.stringify(payload.current_node)};
 
       function visibleTranscriptRoles(messages) {
@@ -173,6 +277,33 @@ function harnessHtml(): string {
 
       try {
         const normalVisibilityState = document.visibilityState;
+        const authSeedResponse = await fetch(authSeedEndpoint, {
+          headers: {
+            authorization: harnessAuthHeader,
+            "chatgpt-account-id": "harness-account",
+            "oai-device-id": "harness-device",
+            "oai-session-id": "harness-session",
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const backendRequestContextCaptured =
+          authSeedResponse.ok &&
+          document.documentElement.dataset.chatgptBackendRequestContextReady === "true";
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const idleStatsBefore = await fetch("/stats").then((response) => response.json());
+        await new Promise((resolve) => setTimeout(resolve, 2_800));
+        const idleStatsAfter = await fetch("/stats").then((response) => response.json());
+        const noAutomaticSidebarRequests =
+          idleStatsBefore.authenticatedSidebarListProbeGets === 0 &&
+          idleStatsBefore.authenticatedSidebarDetailProbeGets === 0 &&
+          idleStatsAfter.authenticatedSidebarListProbeGets === 0 &&
+          idleStatsAfter.authenticatedSidebarDetailProbeGets === 0;
+        const idleSidebarDetailDidNotRepeat =
+          idleStatsAfter.authenticatedSidebarDetailProbeGets ===
+          idleStatsBefore.authenticatedSidebarDetailProbeGets;
+        const idleSidebarListDidNotRepeatAtLegacyCadence =
+          idleStatsAfter.authenticatedSidebarListProbeGets ===
+          idleStatsBefore.authenticatedSidebarListProbeGets;
         const smoothedVisibilityState = (
           await import("/cdn/assets/2afb55f3-harness.js")
         ).readVisibilityState();
@@ -222,6 +353,21 @@ function harnessHtml(): string {
         ]);
         const thirdResponse = await fetch(endpoint);
         const third = await thirdResponse.json();
+        const nativeDateNow = Date.now;
+        let hourLaterResponse;
+        let hourLater;
+        try {
+          Date.now = () => nativeDateNow() + 60 * 60 * 1_000;
+          hourLaterResponse = await fetch(endpoint);
+          hourLater = await hourLaterResponse.json();
+        } finally {
+          Date.now = nativeDateNow;
+        }
+        const hourLaterInitialSnapshotHeader = hourLaterResponse.headers.get(
+          "x-chatgpt-performance-fix-initial-snapshot",
+        );
+        const hourLaterCurrentNodePreserved =
+          hourLater.current_node === expectedCurrentNode;
         const afterOpen = await fetch("/stats").then((response) => response.json());
 
         const lazyCursor = first.__paginatedConversationPage?.cursor;
@@ -235,16 +381,55 @@ function harnessHtml(): string {
 
         const beforeMutation = await fetch("/stats").then((response) => response.json());
 
-        await fetch(endpoint + "/touch", {
-          method: "POST",
+        await fetch(endpoint, {
+          method: "PATCH",
           headers: { "content-type": "application/json" },
           body: "{}",
         });
         const fourthResponse = await fetch(endpoint);
         const fourth = await fourthResponse.json();
+        const postMutationSnapshotRefreshed =
+          first.server_revision === 0 && fourth.server_revision === 1;
 
-        const asyncFirst = await fetch(asyncEndpoint).then((response) => response.json());
-        const asyncSecond = await fetch(asyncEndpoint).then((response) => response.json());
+        const asyncRequestUrl =
+          asyncEndpoint + "?include_has_versions=true&num_turns=2";
+        const asyncFirstResponse = await fetch(asyncRequestUrl);
+        const asyncFirst = await asyncFirstResponse.json();
+        const asyncSecondResponse = await fetch(asyncRequestUrl);
+        const asyncSecond = await asyncSecondResponse.json();
+        const asyncFinishedResponse = await fetch(asyncRequestUrl);
+        const asyncFinished = await asyncFinishedResponse.json();
+        const asyncPinnedResponse = await fetch(asyncRequestUrl);
+        const asyncPinned = await asyncPinnedResponse.json();
+        const asyncFirstText = asyncFirst.messages?.[1]?.content?.parts?.[0] ?? "";
+        const asyncSecondText = asyncSecond.messages?.[1]?.content?.parts?.[0] ?? "";
+        const activeSequentialProgressFresh =
+          asyncFirst.progress_revision === 1 &&
+          asyncSecond.progress_revision === 2 &&
+          asyncFirstText === "active progress 1" &&
+          asyncSecondText === "active progress 2";
+        const activeResponsesMarkedLive =
+          asyncFirstResponse.headers.get("x-chatgpt-performance-fix-active") === "1" &&
+          asyncSecondResponse.headers.get("x-chatgpt-performance-fix-active") === "1";
+        const activeResponsesNotSnapshotted =
+          asyncFirstResponse.headers.get("x-chatgpt-performance-fix-initial-snapshot") == null &&
+          asyncSecondResponse.headers.get("x-chatgpt-performance-fix-initial-snapshot") == null;
+        const completedActiveConversationPinned =
+          asyncFinished.progress_revision === 3 &&
+          asyncFinishedResponse.headers.get("x-chatgpt-performance-fix-active") === "0" &&
+          asyncPinned.progress_revision === 3 &&
+          asyncPinnedResponse.headers.get("x-chatgpt-performance-fix-initial-snapshot") === "hit";
+
+        // A 429 from the lightweight initial endpoint must be retained for
+        // Retry-After. Revalidation must neither hit it again nor fall back to
+        // the legacy full-conversation endpoint.
+        const rateLimitedFirstResponse = await fetch(rateLimitedEndpoint);
+        const rateLimitedSecondResponse = await fetch(rateLimitedEndpoint);
+        const rateLimitedFirstStatus = rateLimitedFirstResponse.status;
+        const rateLimitedSecondStatus = rateLimitedSecondResponse.status;
+        const rateLimitedSnapshotHeader = rateLimitedSecondResponse.headers.get(
+          "x-chatgpt-performance-fix-initial-snapshot",
+        );
 
         const emptyResponse = await fetch(emptyEndpoint);
         const emptyLazy = await emptyResponse.json();
@@ -274,15 +459,38 @@ function harnessHtml(): string {
         const nativeLocalResponse = await fetch(nativeLocalUrl);
         const nativeLocal = await nativeLocalResponse.json();
 
-        const nativeOlderUrl =
-          nativeMessagesEndpoint +
-          "?before=" +
-          encodeURIComponent(nativeLocal.page_info.start_cursor) +
-          "&include_has_versions=true&num_turns=20";
-        const nativeOlderResponse = await fetch(nativeOlderUrl);
-        const nativeOlder = await nativeOlderResponse.json();
-        const nativeOlderCachedResponse = await fetch(nativeOlderUrl);
+        const nativeOlderResponse = nativeLocalResponse;
+        const nativeOlder = nativeLocal;
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const settledSignalsBeforeCachedHistory = Number(
+          document.documentElement.dataset.chatgptHistorySettledSignals ?? "0",
+        );
+        const nativeRequestIdleCallback = window.requestIdleCallback;
+        const forcedIdleBefore = Number(
+          document.documentElement.dataset.chatgptHistoryIdleForced ?? "0",
+        );
+        window.requestIdleCallback = (callback) => {
+          return setTimeout(() => {
+            callback({
+              didTimeout: false,
+              timeRemaining: () => 0,
+            });
+          }, 0);
+        };
+        const cachedHistoryStartedAt = performance.now();
+        const nativeOlderCachedResponse = await fetch(nativeLocalUrl);
         const nativeOlderCached = await nativeOlderCachedResponse.json();
+        const cachedHistoryElapsedMs = performance.now() - cachedHistoryStartedAt;
+        window.requestIdleCallback = nativeRequestIdleCallback;
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const cachedHistoryCompletionSignal =
+          Number(document.documentElement.dataset.chatgptHistorySettledSignals ?? "0") >
+          settledSignalsBeforeCachedHistory;
+        const historyIdleWaitForcedButBounded =
+          Number(document.documentElement.dataset.chatgptHistoryIdleForced ?? "0") >
+            forcedIdleBefore &&
+          cachedHistoryElapsedMs >= 200 &&
+          cachedHistoryElapsedMs < 900;
         const nativeOlderHasNoLocalCursor =
           nativeOlder.page_info.start_cursor == null &&
           nativeOlder.page_info.has_previous_page === false;
@@ -290,6 +498,31 @@ function harnessHtml(): string {
           (message) => message.author?.role ?? null,
         );
         const nativeOlderAnswerChannel = nativeOlder.messages[1]?.channel ?? null;
+
+        // A status-only POST must never invalidate synthetic history cursors.
+        const statusHistoryFirstResponse = await fetch(
+          statusHistoryMessagesEndpoint +
+            "?before=status-root&include_has_versions=true&num_turns=20",
+        );
+        const statusHistoryFirst = await statusHistoryFirstResponse.json();
+        const statusLocalCursor = statusHistoryFirst.page_info.start_cursor;
+        await fetch(statusHistoryAsyncEndpoint, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: "status=4",
+        });
+        const statusHistoryLocalResponse = await fetch(
+          statusHistoryMessagesEndpoint +
+            "?before=" +
+            encodeURIComponent(statusLocalCursor) +
+            "&include_has_versions=true&num_turns=20",
+        );
+        const statusHistoryLocal = await statusHistoryLocalResponse.json();
+        const statusMutationPreservedLocalCursor =
+          typeof statusLocalCursor === "string" &&
+          statusLocalCursor.startsWith("cgptperf-") &&
+          statusHistoryLocalResponse.headers.get("x-chatgpt-performance-fix-local-page") != null &&
+          statusHistoryLocal.messages.length > 0;
 
         const richResponse = await fetch(
           richMessagesEndpoint +
@@ -300,13 +533,13 @@ function harnessHtml(): string {
           (message) => message.author?.role === "assistant",
         );
         const richAssistantText = Array.isArray(richAssistant?.content?.parts)
-          ? richAssistant.content.parts.filter((part) => typeof part === "string").join("\n")
+          ? richAssistant.content.parts.filter((part) => typeof part === "string").join("\\n")
           : "";
         const staticLinks = [
-          ...richAssistantText.matchAll(/\((https:\/\/chatgpt\.com\/#cgptperf-code=[^)]+)\)/g),
+          ...richAssistantText.matchAll(/\\((https:\\/\\/chatgpt\\.com\\/#cgptperf-code=[^)]+)\\)/g),
         ].map((match) => match[1]);
         const richHistoryHasStaticMarkers = staticLinks.length >= 4;
-        const richHistoryFenceCount = (richAssistantText.match(/```/g) ?? []).length;
+        const richHistoryFenceCount = (richAssistantText.match(/\`\`\`/g) ?? []).length;
         let staticCodeHydrated = false;
         let staticCodeReady = false;
         let staticCodeNoCodeMirror = false;
@@ -334,6 +567,141 @@ function harnessHtml(): string {
           staticCodeHeightStable =
             heightBefore > 0 && Math.abs(heightAfter - heightBefore) < 1;
         }
+
+        // A button must be usable immediately at the top even before the
+        // browser delivers the observer's initial entry. The fallback remains
+        // manual: no pagination callback may run until this explicit click.
+        const noEntryRoot = document.createElement("div");
+        noEntryRoot.style.cssText =
+          "height:100px;width:100px;overflow:auto;position:relative";
+        const noEntrySentinel = document.createElement("div");
+        noEntrySentinel.dataset.testid = "conversation-pagination-sentinel";
+        noEntrySentinel.style.height = "10px";
+        const noEntrySpacer = document.createElement("div");
+        noEntrySpacer.style.height = "500px";
+        noEntryRoot.append(noEntrySentinel, noEntrySpacer);
+        document.body.append(noEntryRoot);
+        noEntryRoot.scrollTop = 0;
+        let noEntryPaginationCalls = 0;
+        const noEntryObserver = new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            noEntryPaginationCalls += 1;
+          }
+        }, { root: noEntryRoot });
+        noEntryObserver.observe(noEntrySentinel);
+        const noEntryButton = noEntryRoot.querySelector(
+          '[data-chatgpt-history-load-button="true"]',
+        );
+        const noEntrySelect = noEntryRoot.querySelector(
+          '[data-chatgpt-history-batch-select="true"]',
+        );
+        if (noEntrySelect instanceof HTMLSelectElement) {
+          noEntrySelect.value = "1";
+          noEntrySelect.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        const noEntryButtonEnabledImmediately =
+          noEntryButton instanceof HTMLButtonElement && !noEntryButton.disabled;
+        const noEntryCallsBeforeClick = noEntryPaginationCalls;
+        if (noEntryButton instanceof HTMLButtonElement) noEntryButton.click();
+        for (let attempt = 0; attempt < 10 && noEntryPaginationCalls === 0; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        const noEntryCallsAfterClick = noEntryPaginationCalls;
+        window.dispatchEvent(
+          new CustomEvent("chatgpt-performance-fix:history-page-settled"),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        if (noEntrySelect instanceof HTMLSelectElement) {
+          noEntrySelect.value = "2";
+          noEntrySelect.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const missingInitialEntryUsesManualFallback =
+          noEntryButtonEnabledImmediately &&
+          noEntryCallsBeforeClick === 0 &&
+          noEntryCallsAfterClick === 1 &&
+          noEntryPaginationCalls === 1;
+        noEntryObserver.disconnect();
+        noEntryRoot.remove();
+
+        // React can call observe() before it commits data-testid. A later
+        // attribute commit must classify the same target without leaking an
+        // automatic intersecting callback.
+        const lateIdRoot = document.createElement("div");
+        lateIdRoot.style.cssText =
+          "height:100px;width:100px;overflow:auto;position:relative";
+        const lateIdSentinel = document.createElement("div");
+        lateIdSentinel.style.height = "10px";
+        const lateIdSpacer = document.createElement("div");
+        lateIdSpacer.style.height = "500px";
+        lateIdRoot.append(lateIdSentinel, lateIdSpacer);
+        document.body.append(lateIdRoot);
+        let lateIdPaginationCalls = 0;
+        const lateIdObserver = new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            lateIdPaginationCalls += 1;
+          }
+        }, { root: lateIdRoot });
+        lateIdObserver.observe(lateIdSentinel);
+        lateIdSentinel.dataset.testid =
+          "conversation-pagination-sentinel-react";
+        await new Promise((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => setTimeout(resolve, 0)),
+          ),
+        );
+        const lateIdButtonAppeared = Boolean(
+          lateIdRoot.querySelector('[data-chatgpt-history-load-button="true"]'),
+        );
+        const lateControl = lateIdRoot.querySelector(
+          '[data-chatgpt-history-load-control="true"]',
+        );
+        lateControl?.remove();
+        await new Promise((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => setTimeout(resolve, 0)),
+          ),
+        );
+        const removedControlWasRestored = Boolean(
+          lateIdRoot.querySelector('[data-chatgpt-history-load-button="true"]'),
+        );
+        const lateClassificationStayedManual = lateIdPaginationCalls === 0;
+        lateIdObserver.disconnect();
+        lateIdRoot.remove();
+
+        // An observed sentinel may still be detached while React builds the
+        // subtree. Connecting it later must install the control at that time.
+        const detachedRoot = document.createElement("div");
+        detachedRoot.style.cssText =
+          "height:100px;width:100px;overflow:auto;position:relative";
+        const detachedSentinel = document.createElement("div");
+        detachedSentinel.dataset.testid = "conversation-pagination-sentinel";
+        detachedSentinel.style.height = "10px";
+        const detachedSpacer = document.createElement("div");
+        detachedSpacer.style.height = "500px";
+        detachedRoot.append(detachedSentinel, detachedSpacer);
+        let detachedPaginationCalls = 0;
+        const detachedObserver = new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            detachedPaginationCalls += 1;
+          }
+        }, { root: detachedRoot });
+        detachedObserver.observe(detachedSentinel);
+        const detachedControlAbsentBeforeConnect = !detachedRoot.querySelector(
+          '[data-chatgpt-history-load-control="true"]',
+        );
+        document.body.append(detachedRoot);
+        await new Promise((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => setTimeout(resolve, 0)),
+          ),
+        );
+        const detachedControlAppearedAfterConnect = Boolean(
+          detachedRoot.querySelector('[data-chatgpt-history-load-button="true"]'),
+        );
+        const detachedClassificationStayedManual = detachedPaginationCalls === 0;
+        detachedObserver.disconnect();
+        detachedRoot.remove();
 
         const observerRoot = document.createElement("div");
         observerRoot.style.cssText =
@@ -381,13 +749,273 @@ function harnessHtml(): string {
         const paginationCallsAfterManualClick = paginationObserverCalls;
         const historyButtonBusyAfterClick =
           historyButton?.getAttribute("aria-busy") === "true";
+        // Real ChatGPT tears down and re-arms the pagination observer when the
+        // cursor advances. Re-observe the sentinel to model that new generation
+        // before signalling that page 1 has settled.
+        paginationObserver.observe(observerSentinel);
         window.dispatchEvent(
           new CustomEvent("chatgpt-performance-fix:history-page-settled"),
         );
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) =>
+          requestAnimationFrame(() => setTimeout(resolve, 20)),
+        );
         const historyButtonBusyAfterSettled =
           historyButton?.getAttribute("aria-busy") === "true";
+        const paginationCallsAfterFirstSettled = paginationObserverCalls;
+        window.dispatchEvent(
+          new CustomEvent("chatgpt-performance-fix:history-page-settled"),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const historyButtonBusyAfterBatchSettled =
+          historyButton?.getAttribute("aria-busy") === "true";
+        const historyBatchSelect = observerRoot.querySelector(
+          '[data-chatgpt-history-batch-select="true"]',
+        );
+        const historyBatchSelectValue =
+          historyBatchSelect instanceof HTMLSelectElement ? historyBatchSelect.value : null;
+
+        // After a finite manual batch is completely settled, rapidly leaving
+        // and re-entering the sentinel region must not trigger another native
+        // pagination callback. This reproduces the user's "quick upward scroll"
+        // immediately after loading N turns.
+        const paginationCallsBeforeRapidUpScroll = paginationObserverCalls;
+        observerRoot.scrollTop = 140;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        observerRoot.scrollTop = 0;
+        observerRoot.dispatchEvent(
+          new WheelEvent("wheel", { deltaY: -720, bubbles: true }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const rapidUpScrollDidNotAutoLoad =
+          paginationObserverCalls === paginationCallsBeforeRapidUpScroll;
+
+        // Also cover a shared IntersectionObserver. The old implementation
+        // classified the whole observer by its first observed target; if an
+        // unrelated target came first, a later pagination sentinel leaked its
+        // intersecting callback through and auto-loaded history.
+        const sharedRoot = document.createElement("div");
+        sharedRoot.style.cssText =
+          "height:100px;width:100px;overflow:auto;position:relative";
+        const sharedOtherTarget = document.createElement("div");
+        sharedOtherTarget.style.height = "10px";
+        const sharedSpacerBefore = document.createElement("div");
+        sharedSpacerBefore.style.height = "120px";
+        const sharedSentinel = document.createElement("div");
+        sharedSentinel.dataset.testid = "conversation-pagination-sentinel";
+        sharedSentinel.style.height = "10px";
+        const sharedSpacerAfter = document.createElement("div");
+        sharedSpacerAfter.style.height = "500px";
+        sharedRoot.append(
+          sharedOtherTarget,
+          sharedSpacerBefore,
+          sharedSentinel,
+          sharedSpacerAfter,
+        );
+        document.body.append(sharedRoot);
+        sharedRoot.scrollTop = 140;
+        let sharedPaginationObserverCalls = 0;
+        let sharedOrdinaryObserverCalls = 0;
+        const sharedObserver = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.target === sharedSentinel && entry.isIntersecting) {
+              sharedPaginationObserverCalls += 1;
+            }
+            if (entry.target === sharedOtherTarget) sharedOrdinaryObserverCalls += 1;
+          }
+        }, {
+          root: sharedRoot,
+          rootMargin: "80px 0px 0px",
+        });
+        sharedObserver.observe(sharedOtherTarget);
+        sharedObserver.observe(sharedSentinel);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const ordinaryEntryStillForwarded = sharedOrdinaryObserverCalls > 0;
+        sharedRoot.scrollTop = 0;
+        sharedRoot.dispatchEvent(
+          new WheelEvent("wheel", { deltaY: -720, bubbles: true }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const sharedObserverPaginationBlocked = sharedPaginationObserverCalls === 0;
+        const suppressedAutoPaginationCallbacks = Number(
+          document.documentElement.dataset.chatgptSuppressedAutoPaginationCallbacks ?? "0",
+        );
+        sharedObserver.disconnect();
+        sharedRoot.remove();
+
+        const exactRoot = document.createElement("div");
+        exactRoot.style.cssText =
+          "height:100px;width:100px;overflow:auto;position:relative";
+        const exactSentinel = document.createElement("div");
+        exactSentinel.dataset.testid = "conversation-pagination-sentinel";
+        exactSentinel.style.height = "10px";
+        const exactSpacer = document.createElement("div");
+        exactSpacer.style.height = "500px";
+        exactRoot.append(exactSentinel, exactSpacer);
+        document.body.append(exactRoot);
+        exactRoot.scrollTop = 0;
+        let exactCursor = "exact-server-start";
+        let exactVisibleTurns = 0;
+        let exactFetchChain = Promise.resolve();
+        const exactObserver = new IntersectionObserver((entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return;
+          exactFetchChain = exactFetchChain.then(async () => {
+            const response = await fetch(
+              exactManualMessagesEndpoint +
+                "?before=" + encodeURIComponent(exactCursor) +
+                "&include_has_versions=true&num_turns=1",
+            );
+            const page = await response.json();
+            exactVisibleTurns += page.messages.filter(
+              (message) => message.author?.role === "user",
+            ).length;
+            exactCursor = page.page_info.start_cursor ?? exactCursor;
+            if (page.page_info.has_previous_page && page.page_info.start_cursor) {
+              exactObserver.observe(exactSentinel);
+            }
+          });
+        }, {
+          root: exactRoot,
+          rootMargin: "80px 0px 0px",
+        });
+        exactObserver.observe(exactSentinel);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const exactButton = exactRoot.querySelector(
+          '[data-chatgpt-history-load-button="true"]',
+        );
+        const exactStatsBefore = await fetch("/stats").then((response) => response.json());
+        if (exactButton instanceof HTMLButtonElement) exactButton.click();
+        for (let attempt = 0; attempt < 80; attempt += 1) {
+          await exactFetchChain;
+          if (
+            document.documentElement.dataset.chatgptHistoryBatchActive === "false"
+          ) {
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        await exactFetchChain;
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const exactStatsAfter = await fetch("/stats").then((response) => response.json());
+        const finiteTwoTurnsExact =
+          exactVisibleTurns === 2 &&
+          exactStatsAfter.exactManualHistoryGets ===
+            exactStatsBefore.exactManualHistoryGets + 1 &&
+          exactStatsAfter.exactManualHistoryNumTurns.at(-1) === "2";
+        const finiteTwoTurnsUsedLocalSecondPage =
+          exactStatsAfter.exactManualHistoryGets ===
+            exactStatsBefore.exactManualHistoryGets + 1 &&
+          exactCursor.startsWith("exact-server-");
+        exactObserver.disconnect();
+        exactRoot.remove();
+
+        const loadAllButton = observerRoot.querySelector(
+          '[data-chatgpt-history-load-all-button="true"]',
+        );
+        const paginationCallsBeforeLoadAll = paginationObserverCalls;
+        if (loadAllButton instanceof HTMLButtonElement) loadAllButton.click();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const loadAllStarted =
+          document.documentElement.dataset.chatgptHistoryBatchMode === "all" &&
+          paginationObserverCalls === paginationCallsBeforeLoadAll + 1;
+
+        // Simulate React replacing the pagination sentinel after the first page.
         paginationObserver.disconnect();
+        observerRoot.remove();
+        const replacementRoot = document.createElement("div");
+        replacementRoot.style.cssText =
+          "height:100px;width:100px;overflow:auto;position:relative";
+        const replacementSentinel = document.createElement("div");
+        replacementSentinel.dataset.testid = "conversation-pagination-sentinel";
+        replacementSentinel.style.height = "10px";
+        const replacementSpacer = document.createElement("div");
+        replacementSpacer.style.height = "500px";
+        replacementRoot.append(replacementSentinel, replacementSpacer);
+        document.body.append(replacementRoot);
+        replacementRoot.scrollTop = 0;
+        const replacementPaginationObserver = new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) paginationObserverCalls += 1;
+        }, {
+          root: replacementRoot,
+          rootMargin: "80px 0px 0px",
+        });
+        replacementPaginationObserver.observe(replacementSentinel);
+        await new Promise((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => setTimeout(resolve, 20)),
+          ),
+        );
+        window.dispatchEvent(
+          new CustomEvent("chatgpt-performance-fix:history-page-settled"),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const loadAllSurvivedSentinelReplacement =
+          paginationObserverCalls >= paginationCallsBeforeLoadAll + 2 &&
+          document.documentElement.dataset.chatgptHistoryBatchMode === "all";
+
+        // Cursor/page state advances re-arm the pagination observer before the
+        // next page is eligible to load. Model that generation change here too.
+        replacementPaginationObserver.observe(replacementSentinel);
+        window.dispatchEvent(
+          new CustomEvent("chatgpt-performance-fix:history-page-settled"),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const loadAllContinuedPastTwoPages =
+          paginationObserverCalls >= paginationCallsBeforeLoadAll + 3;
+
+        // Final page: no replacement sentinel should terminate "load all".
+        replacementPaginationObserver.disconnect();
+        replacementRoot.remove();
+        window.dispatchEvent(
+          new CustomEvent("chatgpt-performance-fix:history-page-settled"),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1_150));
+        const loadAllStoppedAtEnd =
+          document.documentElement.dataset.chatgptHistoryBatchActive === "false";
+
+        const menuCommands = window.__gmMenuCommands ?? [];
+        const loadAllMessagesMenuExists = menuCommands.some(
+          (command) => command.label === "加载全部消息",
+        );
+        const defaultMenu = menuCommands.find((command) =>
+          String(command.label).startsWith("默认打开："),
+        );
+        defaultMenu?.callback();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const defaultDialog = document.querySelector("#chatgpt-turn-load-setting-dialog");
+        const defaultDialogOpened = Boolean(defaultDialog);
+        const cancelButton = [...(defaultDialog?.querySelectorAll("button") ?? [])].find(
+          (button) => button.textContent === "取消",
+        );
+        cancelButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const settingsDialogCancelCloses =
+          !document.querySelector("#chatgpt-turn-load-setting-dialog");
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const settingsDialogDoesNotReopenAfterCancel =
+          !document.querySelector("#chatgpt-turn-load-setting-dialog");
+
+        const historyMenu = menuCommands.find((command) =>
+          String(command.label).startsWith("历史批量："),
+        );
+        historyMenu?.callback();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const historyDialog = document.querySelector("#chatgpt-turn-load-setting-dialog");
+        const historyInput = historyDialog?.querySelector("input");
+        if (historyInput instanceof HTMLInputElement) historyInput.value = "5";
+        const saveButton = [...(historyDialog?.querySelectorAll("button") ?? [])].find(
+          (button) => button.textContent === "保存",
+        );
+        saveButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const settingsDialogSaveCloses =
+          !document.querySelector("#chatgpt-turn-load-setting-dialog");
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const settingsDialogDoesNotReopenAfterSave =
+          !document.querySelector("#chatgpt-turn-load-setting-dialog");
+        const savedSettings = JSON.parse(
+          localStorage.getItem("chatgpt-performance-fix:settings:v1") ?? "{}",
+        );
+        const historyMenuSettingSaved = savedSettings.historyBatchTurns === 5;
 
         const richHost = document.createElement("div");
         richHost.innerHTML =
@@ -565,7 +1193,171 @@ function harnessHtml(): string {
         for (const observer of richResizeObservers) observer.disconnect();
         normalResizeObserver.disconnect();
 
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const sidebarRefreshButton = document.querySelector(
+          '[data-chatgpt-sidebar-refresh-button="true"]',
+        );
+        const sidebarRefreshButtonExists =
+          sidebarRefreshButton instanceof HTMLButtonElement;
+        const conversationRefreshButton = document.querySelector(
+          '[data-chatgpt-conversation-refresh-button="true"]',
+        );
+        const conversationRefreshButtonExists =
+          conversationRefreshButton instanceof HTMLButtonElement;
+        const manualConversationRefreshesBefore = Number(
+          document.documentElement.dataset.chatgptManualConversationRefreshes ?? "0",
+        );
+        window.addEventListener(
+          "chatgpt-performance-fix:manual-conversation-refresh",
+          (event) => event.preventDefault(),
+          { once: true },
+        );
+        if (conversationRefreshButton instanceof HTMLButtonElement) {
+          conversationRefreshButton.click();
+        }
+        const conversationManualRefreshTriggered =
+          Number(
+            document.documentElement.dataset.chatgptManualConversationRefreshes ?? "0",
+          ) === manualConversationRefreshesBefore + 1;
+        const sidebarStatsBeforeManualRefresh = await fetch("/stats").then(
+          (response) => response.json(),
+        );
+        if (sidebarRefreshButton instanceof HTMLButtonElement) {
+          sidebarRefreshButton.click();
+        }
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const sidebarStatsAfterManualRefresh = await fetch("/stats").then(
+          (response) => response.json(),
+        );
+        const sidebarManualRefreshTriggered =
+          sidebarStatsAfterManualRefresh.authenticatedSidebarListProbeGets ===
+            sidebarStatsBeforeManualRefresh.authenticatedSidebarListProbeGets + 1 &&
+          sidebarStatsAfterManualRefresh.authenticatedSidebarDetailProbeGets ===
+            sidebarStatsBeforeManualRefresh.authenticatedSidebarDetailProbeGets + 1;
+        const sidebarAnchor = document.querySelector("#sidebar-conversation");
+        const sidebarTitleFresh =
+          sidebarAnchor?.querySelector(".truncate")?.textContent === "fresh sidebar title";
+        const sidebarRunningBadge = Boolean(
+          sidebarAnchor?.querySelector('[data-chatgpt-sidebar-sync-status="true"]'),
+        );
+
+        await fetch(sendEndpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: ${JSON.stringify(conversationId)},
+            action: "next",
+            client_prepare_source: "context_change",
+          }),
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const backgroundSendDidNotShowStatus =
+          !document.querySelector('[data-chatgpt-delivery-status="true"]') &&
+          document.documentElement.dataset.chatgptLastSendVerified !== "pending";
+
+        const sentUserTurn = document.createElement("section");
+        sentUserTurn.dataset.turn = "user";
+        sentUserTurn.dataset.turnId = "harness-user-turn";
+        sentUserTurn.dataset.testid = "conversation-turn-999";
+        const sentMessageElement = document.createElement("div");
+        sentMessageElement.dataset.messageAuthorRole = "user";
+        sentMessageElement.dataset.messageId = sentProbeMessageId;
+        sentMessageElement.textContent = sentProbeMessageText;
+        sentUserTurn.append(sentMessageElement);
+        document.body.append(sentUserTurn);
+
+        const sendPromise = fetch(sendEndpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: ${JSON.stringify(conversationId)},
+            messages: [
+              {
+                id: sentProbeMessageId,
+                author: { role: "user" },
+                content: { content_type: "text", parts: [sentProbeMessageText] },
+              },
+            ],
+          }),
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const sendingStatus = sentMessageElement.querySelector(
+          '[data-chatgpt-delivery-status="true"]',
+        );
+        const inlineSendingStatus =
+          sendingStatus?.getAttribute("data-chatgpt-delivery-stage") === "sending" &&
+          Boolean(sendingStatus.querySelector(".chatgpt-delivery-spinner"));
+        const deliveryStatusInsideMessage =
+          sendingStatus?.closest('[data-message-author-role="user"]') === sentMessageElement;
+
+        const sendResponse = await sendPromise;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const inlineAcceptedStatus =
+          sentMessageElement
+            .querySelector('[data-chatgpt-delivery-status="true"]')
+            ?.getAttribute("data-chatgpt-delivery-stage") === "sent" &&
+          document.documentElement.dataset.chatgptLastSendVerified === "true" &&
+          !sentMessageElement.querySelector(".chatgpt-delivery-spinner");
+
+        const assistantReplyTurn = document.createElement("section");
+        assistantReplyTurn.dataset.turn = "assistant";
+        assistantReplyTurn.dataset.turnId = "harness-assistant-turn";
+        assistantReplyTurn.dataset.testid = "conversation-turn-1000";
+        const assistantReplyElement = document.createElement("div");
+        assistantReplyElement.className = "agent-turn";
+        assistantReplyElement.textContent = "streaming reply started";
+        assistantReplyTurn.append(assistantReplyElement);
+        document.body.append(assistantReplyTurn);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const replyStartConfirmedSend =
+          document.documentElement.dataset.chatgptLastSendVerified === "true" &&
+          document.documentElement.dataset.chatgptLastSendEvidence === "assistant-turn" &&
+          sentMessageElement
+            .querySelector('[data-chatgpt-delivery-status="true"]')
+            ?.getAttribute("data-chatgpt-delivery-stage") === "sent";
+
+        await fetch(resumeEndpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: ${JSON.stringify(conversationId)},
+            messages: [
+              {
+                id: sentProbeMessageId,
+                author: { role: "user" },
+                content: { content_type: "text", parts: [sentProbeMessageText] },
+              },
+            ],
+            resume_token: "harness-resume-token",
+          }),
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const resumeDidNotRestartVerifier =
+          Number(document.documentElement.dataset.chatgptDeliveryTrackedSends ?? "0") === 1 &&
+          document.documentElement.dataset.chatgptLastSendVerified === "true" &&
+          document.documentElement.dataset.chatgptLastSendEvidence === "assistant-turn";
+
+        await new Promise((resolve) => setTimeout(resolve, 900));
+        const sendVerified =
+          sendResponse.ok && document.documentElement.dataset.chatgptLastSendVerified === "true";
+        const deliveryIndicatorText =
+          sentMessageElement.querySelector('[data-chatgpt-delivery-status="true"]')?.textContent ?? "";
+        const deliveryIndicatorConfirmed = deliveryIndicatorText.includes("已发送");
+
+        await fetch(currentAsyncStatusEndpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: 4 }),
+        });
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        const sidebarCompletedBadgeRemoved = !sidebarAnchor?.querySelector(
+          '[data-chatgpt-sidebar-sync-status="true"]',
+        );
+
         const afterMutation = await fetch("/stats").then((response) => response.json());
+        const jsonWorkerParses = Number(
+          document.documentElement.dataset.chatgptJsonWorkerParses ?? "0",
+        );
 
         publish({
           ok: true,
@@ -590,8 +1382,13 @@ function harnessHtml(): string {
           secondNodes: Object.keys(second.mapping).length,
           cachedNodes: Object.keys(third.mapping).length,
           postInvalidationNodes: Object.keys(fourth.mapping).length,
-          asyncFirstNodes: Object.keys(asyncFirst.mapping).length,
-          asyncSecondNodes: Object.keys(asyncSecond.mapping).length,
+          postMutationSnapshotRefreshed,
+          asyncFirstMessages: asyncFirst.messages.length,
+          asyncSecondMessages: asyncSecond.messages.length,
+          activeSequentialProgressFresh,
+          activeResponsesMarkedLive,
+          activeResponsesNotSnapshotted,
+          completedActiveConversationPinned,
           emptyLazyNodes: Object.keys(emptyLazy.mapping).length,
           emptyLazyPaginationEnabled: Boolean(emptyLazy.__paginatedConversationPage),
           emptyLazyHeader:
@@ -620,6 +1417,30 @@ function harnessHtml(): string {
           lazyInitialNumTurnsBeforeMutation: beforeMutation.lazyInitialNumTurns,
           lazyMessagesNumTurnsBeforeMutation: beforeMutation.lazyMessagesNumTurns,
           legacyFullGetsBeforeMutation: beforeMutation.conversationGets,
+          hourLaterInitialSnapshotHeader,
+          hourLaterCurrentNodePreserved,
+          automaticInitialRevalidationsServedLocally:
+            Number(
+              document.documentElement.dataset.chatgptInitialSnapshotHits ?? "0",
+            ) >= 2,
+          initialSnapshotsStored:
+            Number(
+              document.documentElement.dataset.chatgptInitialSnapshotsStored ?? "0",
+            ) >= 4,
+          activeSnapshotsSkipped:
+            Number(
+              document.documentElement.dataset.chatgptInitialSnapshotSkippedActive ?? "0",
+            ) >= 2,
+          rateLimitedFirstStatus,
+          rateLimitedSecondStatus,
+          rateLimitedSnapshotHeader,
+          rateLimitedInitialGets: afterMutation.rateLimitedInitialGets,
+          rateLimitedInitialNumTurns: afterMutation.rateLimitedInitialNumTurns,
+          rateLimitedLegacyGets: afterMutation.rateLimitedLegacyGets,
+          rateLimitRevalidationSuppressed:
+            Number(
+              document.documentElement.dataset.chatgptInitialRateLimitSuppressions ?? "0",
+            ) >= 1,
           fallbackLegacyGets: afterMutation.fallbackLegacyGets,
           nativeInitialMessages: nativeInitial.messages.length,
           nativeLocalMessages: nativeLocal.messages.length,
@@ -636,15 +1457,14 @@ function harnessHtml(): string {
           nativeOlderCachedRoles: nativeOlderCached.messages.map(
             (message) => message.author?.role ?? null,
           ),
+          cachedHistoryCompletionSignal,
+          historyIdleWaitForcedButBounded,
           historyCacheHits: Number(
             document.documentElement.dataset.chatgptHistoryCacheHits ?? "0",
           ),
           optimizerWorkerUsed: jsonWorkerParses > 0,
           userTaskRanBeforeLocalHistory,
-          nativeInitialUsesLocalCursor:
-            typeof localCursor === "string" && localCursor.startsWith("cgptperf-"),
-          nativeLocalRestoresServerCursor:
-            nativeLocal.page_info.start_cursor === "cursor-older",
+          nativeInitialKeepsServerCursor: localCursor === "cursor-older",
           nativeLocalYieldedAfterPaint: paintOccurredBeforeLocalResponse,
           nativeInitialCurrentNodePreserved:
             nativeInitial.current_node === expectedCurrentNode,
@@ -660,15 +1480,76 @@ function harnessHtml(): string {
           nativeMessagesNetworkGets: afterMutation.nativeMessagesGets,
           nativeInitialNumTurns: afterMutation.nativeInitialNumTurns,
           nativeMessagesNumTurns: afterMutation.nativeMessagesNumTurns,
+          statusMutationPreservedLocalCursor,
+          statusHistoryMessagesGets: afterMutation.statusHistoryMessagesGets,
+          statusMutationPosts: afterMutation.statusMutationPosts,
+          backendRequestContextCaptured,
+          noAutomaticSidebarRequests,
+          idleSidebarDetailDidNotRepeat,
+          idleSidebarListDidNotRepeatAtLegacyCadence,
+          sidebarRefreshButtonExists,
+          sidebarManualRefreshTriggered,
+          conversationRefreshButtonExists,
+          conversationManualRefreshTriggered,
+          authenticatedSidebarListProbeUsed:
+            afterMutation.authenticatedSidebarListProbeGets > 0,
+          authenticatedSidebarDetailProbeUsed:
+            afterMutation.authenticatedSidebarDetailProbeGets > 0,
+          noDeliveryPolling:
+            afterMutation.authenticatedPersistenceProbeGets === 0 &&
+            afterMutation.deliveryIncludeMessageIds.length === 0,
+          unauthorizedProbeGets: afterMutation.unauthorizedProbeGets,
+          sidebarTitleFresh,
+          sidebarRunningBadge,
+          sidebarCompletedBadgeRemoved,
+          sidebarListRefreshed: afterMutation.sidebarListGets >= 1,
+          backgroundSendDidNotShowStatus,
+          inlineSendingStatus,
+          inlineAcceptedStatus,
+          deliveryStatusInsideMessage,
+          replyStartConfirmedSend,
+          resumeDidNotRestartVerifier,
+          sendVerified,
+          deliveryIndicatorConfirmed,
+          sendPosts: afterMutation.sendPosts,
+          resumePosts: afterMutation.resumePosts,
           tunedPaginationRootMargin,
           historyButtonExists,
           historyButtonEnabledBeforeClick,
           historyButtonBusyAfterClick,
           historyButtonBusyAfterSettled,
+          historyButtonBusyAfterBatchSettled,
+          historyBatchSelectValue,
           paginationCallsBeforeUserScroll,
           paginationCallsAfterProgrammaticScroll,
           paginationCallsAfterUserScroll,
           paginationCallsAfterManualClick,
+          paginationCallsAfterFirstSettled,
+          rapidUpScrollDidNotAutoLoad,
+          ordinaryEntryStillForwarded,
+          sharedObserverPaginationBlocked,
+          suppressedAutoPaginationCallbacksObserved:
+            suppressedAutoPaginationCallbacks > 0,
+          missingInitialEntryUsesManualFallback,
+          lateIdButtonAppeared,
+          removedControlWasRestored,
+          lateClassificationStayedManual,
+          detachedControlAbsentBeforeConnect,
+          detachedControlAppearedAfterConnect,
+          detachedClassificationStayedManual,
+          finiteTwoTurnsExact,
+          finiteTwoTurnsUsedLocalSecondPage,
+          loadAllStarted,
+          loadAllSurvivedSentinelReplacement,
+          loadAllContinuedPastTwoPages,
+          loadAllStoppedAtEnd,
+          loadAllMessagesMenuExists,
+          defaultDialogOpened,
+          settingsDialogCancelCloses,
+          settingsDialogDoesNotReopenAfterCancel,
+          settingsDialogSaveCloses,
+          settingsDialogDoesNotReopenAfterSave,
+          historyMenuSettingSaved,
           manualHistoryClicks: Number(
             document.documentElement.dataset.chatgptManualHistoryClicks ?? "0",
           ),
@@ -761,18 +1642,198 @@ const server = Bun.serve({
   port: 0,
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname === "/") {
+    const hasHarnessAuth = request.headers.get("authorization") === harnessAuthHeader;
+    if (url.pathname === "/" || url.pathname === `/c/${conversationId}`) {
       return new Response(harnessHtml(), {
         headers: { "content-type": "text/html; charset=utf-8" },
       });
     }
+    if (url.pathname === authSeedPath && request.method === "GET") {
+      return jsonNoStore({ ok: true });
+    }
+    if (url.pathname === statusHistoryMessagesPath && request.method === "GET") {
+      statusHistoryMessagesGets += 1;
+      return jsonNoStore({
+        messages: statusHistoryMessages,
+        page_info: { has_previous_page: false, start_cursor: null },
+        safe_urls: [],
+        blocked_urls: [],
+      });
+    }
+    if (url.pathname === exactManualMessagesPath && request.method === "GET") {
+      exactManualHistoryGets += 1;
+      exactManualHistoryNumTurns.push(url.searchParams.get("num_turns") ?? "missing");
+      return jsonNoStore({
+        messages: exactManualMessages,
+        page_info: {
+          has_previous_page: true,
+          start_cursor: "exact-server-next",
+        },
+        safe_urls: [],
+        blocked_urls: [],
+      });
+    }
+    if (url.pathname === rateLimitedInitialPath && request.method === "GET") {
+      rateLimitedInitialGets += 1;
+      rateLimitedInitialNumTurns.push(url.searchParams.get("num_turns") ?? "missing");
+      return new Response(JSON.stringify({ detail: "rate limited by harness" }), {
+        status: 429,
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "retry-after": "120",
+        },
+      });
+    }
+    if (url.pathname === "/backend-api/conversations" && request.method === "GET") {
+      if (!hasHarnessAuth) {
+        unauthorizedProbeGets += 1;
+        return new Response(
+          JSON.stringify({
+            detail: { message: "Unauthorized - Access token is missing" },
+          }),
+          {
+            status: 401,
+            headers: {
+              "cache-control": "no-store",
+              "content-type": "application/json",
+            },
+          },
+        );
+      }
+      authenticatedSidebarListProbeGets += 1;
+      sidebarListGets += 1;
+      return jsonNoStore({
+        items: [
+          {
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            title: "other conversation",
+            update_time: Date.now() / 1000,
+            async_status: null,
+          },
+        ],
+        total: 1,
+        limit: 28,
+        offset: 0,
+      });
+    }
+    if (url.pathname === sendPath && request.method === "POST") {
+      sendPosts += 1;
+      let hasUserMessage = false;
+      try {
+        const parsed = JSON.parse(await request.text()) as {
+          messages?: Array<{ author?: { role?: string } }>;
+        };
+        hasUserMessage =
+          parsed.messages?.some((message) => message.author?.role === "user") === true;
+      } catch {
+        // The false-positive regression intentionally sends a non-message body.
+      }
+      if (hasUserMessage) {
+        await Bun.sleep(80);
+        sentMessagePersisted = true;
+      }
+      return jsonNoStore({ ok: true });
+    }
+    if (url.pathname === resumePath && request.method === "POST") {
+      resumePosts += 1;
+      return jsonNoStore({ ok: true, resumed: true });
+    }
+    if (
+      (url.pathname === statusHistoryAsyncPath || url.pathname === currentAsyncStatusPath) &&
+      request.method === "POST"
+    ) {
+      statusMutationPosts += 1;
+      const rawBody = await request.text();
+      let status: unknown;
+      try {
+        status = (JSON.parse(rawBody) as { status?: unknown }).status;
+      } catch {
+        const body = new URLSearchParams(rawBody);
+        const rawStatus = body.get("status");
+        status = rawStatus == null || rawStatus === "null" ? null : Number(rawStatus);
+      }
+      if (url.pathname === currentAsyncStatusPath) {
+        sidebarAsyncStatus = status;
+      }
+      return jsonNoStore({ status: "OK" });
+    }
     if (url.pathname === lazyInitialPath && request.method === "GET") {
+      const numTurns = url.searchParams.get("num_turns");
+      const includeMessageId = url.searchParams.get("include_message_id");
+      if (numTurns === "1" && includeMessageId == null) {
+        if (!hasHarnessAuth) {
+          unauthorizedProbeGets += 1;
+          return new Response(
+            JSON.stringify({
+              detail: { message: "Unauthorized - Access token is missing" },
+            }),
+            {
+              status: 401,
+              headers: {
+                "cache-control": "no-store",
+                "content-type": "application/json",
+              },
+            },
+          );
+        }
+        authenticatedSidebarDetailProbeGets += 1;
+        return jsonNoStore({
+          title: "fresh sidebar title",
+          conversation_id: conversationId,
+          current_node: payload.current_node,
+          async_status: sidebarAsyncStatus,
+          messages: [],
+          page_info: { has_previous_page: true, start_cursor: "sidebar-probe" },
+          safe_urls: [],
+          blocked_urls: [],
+        });
+      }
       lazyInitialGets += 1;
-      lazyInitialNumTurns.push(url.searchParams.get("num_turns") ?? "missing");
+      lazyInitialNumTurns.push(numTurns ?? "missing");
+      if (includeMessageId) deliveryIncludeMessageIds.push(includeMessageId);
+      if (includeMessageId) {
+        if (!hasHarnessAuth) {
+          unauthorizedProbeGets += 1;
+          return new Response(
+            JSON.stringify({
+              detail: { message: "Unauthorized - Access token is missing" },
+            }),
+            {
+              status: 401,
+              headers: {
+                "cache-control": "no-store",
+                "content-type": "application/json",
+              },
+            },
+          );
+        }
+        authenticatedPersistenceProbeGets += 1;
+      }
+      if (sentMessagePersisted && url.searchParams.get("num_turns") === "4") {
+        return jsonNoStore({
+          title: "fresh sidebar title",
+          conversation_id: conversationId,
+          current_node: sentMessageId,
+          async_status: sidebarAsyncStatus,
+          messages: [
+            {
+              id: sentMessageId,
+              author: { role: "user" },
+              content: { content_type: "text", parts: [sentMessageText] },
+              status: "finished_successfully",
+            },
+          ],
+          page_info: { has_previous_page: false, start_cursor: null },
+          safe_urls: [],
+          blocked_urls: [],
+        });
+      }
       // Deliberately return only the tail of the latest turn. The userscript must
       // follow the cursor just far enough to recover the user/AI boundary.
       return jsonNoStore({
         title: "lazy initial harness",
+        server_revision: mutations,
         conversation_id: conversationId,
         current_node: payload.current_node,
         async_status: null,
@@ -929,11 +1990,29 @@ const server = Bun.serve({
     }
     if (url.pathname === asyncConversationPath && request.method === "GET") {
       asyncConversationGets += 1;
-      return new Response(asyncConversationText, {
-        headers: {
-          "cache-control": "no-store",
-          "content-type": "application/json",
-        },
+      const revision = asyncConversationGets;
+      const stillActive = revision < 3;
+      return jsonNoStore({
+        title: `active progress ${revision}`,
+        progress_revision: revision,
+        conversation_id: "11111111-1111-4111-8111-111111111111",
+        current_node: asyncCurrentMessageId,
+        async_status: stillActive ? { status: "running" } : null,
+        messages: asyncProgressMessages.map((message) =>
+          message.id === asyncCurrentMessageId
+            ? {
+                ...message,
+                status: stillActive ? "in_progress" : "finished_successfully",
+                content: {
+                  ...message.content,
+                  parts: [`active progress ${revision}`],
+                },
+              }
+            : message,
+        ),
+        page_info: { has_previous_page: false, start_cursor: null },
+        safe_urls: [],
+        blocked_urls: [],
       });
     }
     if (url.pathname === "/cdn/assets/2afb55f3-harness.js") {
@@ -956,6 +2035,15 @@ const server = Bun.serve({
         },
       });
     }
+    if (url.pathname === rateLimitedConversationPath && request.method === "GET") {
+      rateLimitedLegacyGets += 1;
+      return new Response(conversationText, {
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+        },
+      });
+    }
     if (url.pathname === conversationPath && request.method === "GET") {
       conversationGets += 1;
       await Bun.sleep(75);
@@ -967,10 +2055,7 @@ const server = Bun.serve({
         },
       });
     }
-    if (
-      url.pathname === `${conversationPath}/touch` &&
-      request.method === "POST"
-    ) {
+    if (url.pathname === conversationPath && request.method === "PATCH") {
       mutations += 1;
       return jsonNoStore({ ok: true });
     }
@@ -990,6 +2075,21 @@ const server = Bun.serve({
         lazyMessagesNumTurns,
         nativeInitialNumTurns,
         nativeMessagesNumTurns,
+        statusHistoryMessagesGets,
+        statusMutationPosts,
+        sidebarListGets,
+        sendPosts,
+        resumePosts,
+        unauthorizedProbeGets,
+        authenticatedSidebarListProbeGets,
+        authenticatedSidebarDetailProbeGets,
+        authenticatedPersistenceProbeGets,
+        exactManualHistoryGets,
+        exactManualHistoryNumTurns,
+        rateLimitedLegacyGets,
+        rateLimitedInitialGets,
+        rateLimitedInitialNumTurns,
+        deliveryIncludeMessageIds,
         mutations,
       });
     }
@@ -1004,6 +2104,7 @@ let child: ReturnType<typeof Bun.spawn> | undefined;
 
 class CdpClient {
   readonly socket: WebSocket;
+  readonly events: Array<{ method?: string; params?: unknown }> = [];
   #nextId = 1;
   #pending = new Map<
     number,
@@ -1015,10 +2116,20 @@ class CdpClient {
     socket.addEventListener("message", (event) => {
       const message = JSON.parse(String(event.data)) as {
         id?: number;
+        method?: string;
+        params?: unknown;
         result?: unknown;
         error?: { message?: string };
       };
-      if (message.id == null) return;
+      if (message.id == null) {
+        if (
+          message.method === "Runtime.exceptionThrown" ||
+          message.method === "Runtime.consoleAPICalled"
+        ) {
+          this.events.push({ method: message.method, params: message.params });
+        }
+        return;
+      }
       const pending = this.#pending.get(message.id);
       if (!pending) return;
       this.#pending.delete(message.id);
@@ -1109,7 +2220,7 @@ try {
     await cdp.call("Page.enable");
     await cdp.call("Runtime.enable");
     await cdp.call("Page.navigate", {
-      url: `http://${server.hostname}:${server.port}/`,
+      url: `http://${server.hostname}:${server.port}/c/${conversationId}`,
     });
 
     const deadline = Date.now() + 30_000;
@@ -1127,7 +2238,25 @@ try {
       }
       await Bun.sleep(100);
     }
-    if (!encoded) throw new Error("Browser harness timed out waiting for result");
+    if (!encoded) {
+      const diagnostic = await cdp.call<{ result?: { value?: unknown } }>(
+        "Runtime.evaluate",
+        {
+          expression: `JSON.stringify({
+            readyState: document.readyState,
+            status: document.querySelector('#status')?.textContent ?? null,
+            href: location.href,
+            datasets: {...document.documentElement.dataset}
+          })`,
+          returnByValue: true,
+        },
+      );
+      throw new Error(
+        `Browser harness timed out waiting for result. State=${String(
+          diagnostic.result?.value ?? "unknown",
+        )} Events=${JSON.stringify(cdp.events.slice(-8))}`,
+      );
+    }
   } finally {
     cdp.close();
   }
@@ -1169,12 +2298,17 @@ const expected = {
   fallbackKeptNodes: 35,
   firstNodes: 5,
   lazyInitialVisibleRoles: ["user", "assistant"],
-  nativeInitialVisibleRoles: ["user", "assistant"],
+  nativeInitialVisibleRoles: ["user", "assistant", "user", "assistant"],
   secondNodes: 5,
   cachedNodes: 5,
   postInvalidationNodes: 5,
-  asyncFirstNodes: 35,
-  asyncSecondNodes: 35,
+  postMutationSnapshotRefreshed: true,
+  asyncFirstMessages: 2,
+  asyncSecondMessages: 2,
+  activeSequentialProgressFresh: true,
+  activeResponsesMarkedLive: true,
+  activeResponsesNotSnapshotted: true,
+  completedActiveConversationPinned: true,
   emptyLazyNodes: 5,
   emptyLazyPaginationEnabled: true,
   emptyLazyHeader: "native-pagination",
@@ -1188,15 +2322,27 @@ const expected = {
   lazyOlderRoles: ["user", "assistant"],
   lazyOlderAnswerChannel: "final",
   lazyOlderOptimizationHeader: "565->2",
-  lazyInitialNetworkGetsAfterOpen: 2,
-  lazyMessagesNetworkGetsAfterOpen: 2,
-  lazyInitialNetworkGetsBeforeMutation: 2,
-  lazyMessagesNetworkGetsBeforeMutation: 4,
-  lazyInitialNumTurnsBeforeMutation: ["2", "2"],
-  lazyMessagesNumTurnsBeforeMutation: ["4", "4", "2", "4"],
+  lazyInitialNetworkGetsAfterOpen: 1,
+  lazyMessagesNetworkGetsAfterOpen: 1,
+  lazyInitialNetworkGetsBeforeMutation: 1,
+  lazyMessagesNetworkGetsBeforeMutation: 3,
+  lazyInitialNumTurnsBeforeMutation: ["2"],
+  lazyMessagesNumTurnsBeforeMutation: ["4", "2", "4"],
   legacyFullGetsBeforeMutation: 0,
+  hourLaterInitialSnapshotHeader: "hit",
+  hourLaterCurrentNodePreserved: true,
+  automaticInitialRevalidationsServedLocally: true,
+  initialSnapshotsStored: true,
+  activeSnapshotsSkipped: true,
+  rateLimitedFirstStatus: 429,
+  rateLimitedSecondStatus: 429,
+  rateLimitedSnapshotHeader: "rate-limit-backoff",
+  rateLimitedInitialGets: 1,
+  rateLimitedInitialNumTurns: ["2"],
+  rateLimitedLegacyGets: 0,
+  rateLimitRevalidationSuppressed: true,
   fallbackLegacyGets: 3,
-  nativeInitialMessages: 4,
+  nativeInitialMessages: 6,
   nativeLocalMessages: 2,
   nativeOlderMessages: 2,
   nativeOlderRoles: ["user", "assistant"],
@@ -1209,31 +2355,88 @@ const expected = {
   staticCodeNoCodeMirror: true,
   staticCodeHeightStable: true,
   nativeOlderCachedRoles: ["user", "assistant"],
+  cachedHistoryCompletionSignal: true,
+  historyIdleWaitForcedButBounded: true,
   historyCacheHits: 1,
   optimizerWorkerUsed: true,
   userTaskRanBeforeLocalHistory: true,
-  nativeInitialUsesLocalCursor: true,
-  nativeLocalRestoresServerCursor: true,
+  nativeInitialKeepsServerCursor: true,
   nativeLocalYieldedAfterPaint: true,
   nativeInitialCurrentNodePreserved: true,
   nativeInitialResponseUrlPreserved: true,
   nativeInitialOptimizationHeader: "618->6",
-  nativeLocalPageHeader: "1/1",
+  nativeLocalPageHeader: null,
   nativeOlderOptimizationHeader: "773->2",
   nativeInitialNetworkGets: 1,
   nativeMessagesNetworkGets: 2,
   nativeInitialNumTurns: ["2"],
   nativeMessagesNumTurns: ["2", "4"],
+  statusMutationPreservedLocalCursor: true,
+  statusHistoryMessagesGets: 1,
+  statusMutationPosts: 2,
+  backendRequestContextCaptured: true,
+  noAutomaticSidebarRequests: true,
+  idleSidebarDetailDidNotRepeat: true,
+  idleSidebarListDidNotRepeatAtLegacyCadence: true,
+  sidebarRefreshButtonExists: true,
+  sidebarManualRefreshTriggered: true,
+  conversationRefreshButtonExists: true,
+  conversationManualRefreshTriggered: true,
+  authenticatedSidebarListProbeUsed: true,
+  authenticatedSidebarDetailProbeUsed: true,
+  noDeliveryPolling: true,
+  unauthorizedProbeGets: 0,
+  sidebarTitleFresh: true,
+  sidebarRunningBadge: true,
+  sidebarCompletedBadgeRemoved: true,
+  sidebarListRefreshed: true,
+  backgroundSendDidNotShowStatus: true,
+  inlineSendingStatus: true,
+  inlineAcceptedStatus: true,
+  deliveryStatusInsideMessage: true,
+  replyStartConfirmedSend: true,
+  resumeDidNotRestartVerifier: true,
+  sendVerified: true,
+  deliveryIndicatorConfirmed: true,
+  sendPosts: 2,
+  resumePosts: 1,
   tunedPaginationRootMargin: "80px 0px 0px 0px",
   historyButtonExists: true,
   historyButtonEnabledBeforeClick: true,
   historyButtonBusyAfterClick: true,
-  historyButtonBusyAfterSettled: false,
+  historyButtonBusyAfterSettled: true,
+  historyButtonBusyAfterBatchSettled: false,
+  historyBatchSelectValue: "2",
   paginationCallsBeforeUserScroll: 0,
   paginationCallsAfterProgrammaticScroll: 0,
   paginationCallsAfterUserScroll: 0,
   paginationCallsAfterManualClick: 1,
-  manualHistoryClicks: 1,
+  paginationCallsAfterFirstSettled: 2,
+  rapidUpScrollDidNotAutoLoad: true,
+  ordinaryEntryStillForwarded: true,
+  sharedObserverPaginationBlocked: true,
+  suppressedAutoPaginationCallbacksObserved: true,
+  missingInitialEntryUsesManualFallback: true,
+  lateIdButtonAppeared: true,
+  removedControlWasRestored: true,
+  lateClassificationStayedManual: true,
+  detachedControlAbsentBeforeConnect: true,
+  detachedControlAppearedAfterConnect: true,
+  detachedClassificationStayedManual: true,
+  finiteTwoTurnsExact: true,
+  finiteTwoTurnsUsedLocalSecondPage: true,
+  loadAllStarted: true,
+  loadAllSurvivedSentinelReplacement: true,
+  loadAllContinuedPastTwoPages: true,
+  loadAllStoppedAtEnd: true,
+  loadAllMessagesMenuExists: true,
+  defaultDialogOpened: true,
+  settingsDialogCancelCloses: true,
+  settingsDialogDoesNotReopenAfterCancel: true,
+  settingsDialogSaveCloses: true,
+  settingsDialogDoesNotReopenAfterSave: true,
+  historyMenuSettingSaved: true,
+  manualHistoryClicks: 8,
   richStyleInstalled: true,
   richMessageContentVisibility: "visible",
   richSmoothedVisible: true,
@@ -1270,9 +2473,9 @@ const expected = {
   richBlocksActivated: 37,
   currentNodePreserved: true,
   responseUrlPreserved: true,
-  lazyInitialGetsAfterMutation: 3,
+  lazyInitialGetsAfterMutation: 2,
   legacyFullGetsAfterMutation: 0,
-  asyncSequentialNetworkGets: 2,
+  asyncSequentialNetworkGets: 3,
   emptyLegacyGets: 0,
   emptyInitialGets: 1,
   emptyMessagesGets: 1,
