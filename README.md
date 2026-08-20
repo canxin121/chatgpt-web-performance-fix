@@ -12,10 +12,11 @@
 
 ## 安装
 
-1. 安装 [Tampermonkey](https://www.tampermonkey.net/)。
-2. 打开 [`dist/chatgpt-performance-fix.user.js`](dist/chatgpt-performance-fix.user.js)。
-3. 将脚本安装到 Tampermonkey。
-4. 刷新 `https://chatgpt.com/`。
+先安装 [Tampermonkey](https://www.tampermonkey.net/)，然后点击：
+
+### [一键安装 ChatGPT Performance Fix](https://raw.githubusercontent.com/canxin121/chatgpt-web-performance-fix/main/dist/chatgpt-performance-fix.user.js)
+
+Tampermonkey 会自动打开脚本安装页面。安装完成后刷新 `https://chatgpt.com/` 即可。
 
 ## 使用
 
