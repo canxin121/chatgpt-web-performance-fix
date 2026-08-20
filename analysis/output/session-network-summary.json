@@ -1,0 +1,1117 @@
+{
+  "recordCount": 603,
+  "durationMs": 339530,
+  "kindCounts": {
+    "other": 103,
+    "backend-other": 57,
+    "legacy-full": 17,
+    "asset": 426
+  },
+  "mimeCounts": {
+    "image/png": {
+      "count": 6,
+      "compressedBytes": 323948
+    },
+    "application/json": {
+      "count": 153,
+      "compressedBytes": 22255030
+    },
+    "warc/revisit": {
+      "count": 11,
+      "compressedBytes": 86952
+    },
+    "text/plain": {
+      "count": 1,
+      "compressedBytes": 7368
+    },
+    "application/javascript": {
+      "count": 389,
+      "compressedBytes": 12540219
+    },
+    "unknown": {
+      "count": 1,
+      "compressedBytes": 7344
+    },
+    "text/css": {
+      "count": 34,
+      "compressedBytes": 630696
+    },
+    "image/svg+xml": {
+      "count": 4,
+      "compressedBytes": 255912
+    },
+    "image/webp": {
+      "count": 1,
+      "compressedBytes": 42570
+    },
+    "image/x-icon": {
+      "count": 1,
+      "compressedBytes": 14955
+    },
+    "text/html": {
+      "count": 1,
+      "compressedBytes": 115490
+    },
+    "application/octet-stream": {
+      "count": 1,
+      "compressedBytes": 56901
+    }
+  },
+  "conversationRequests": [
+    {
+      "relativeMs": 18097,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1156345,
+      "response": {
+        "bodyBytes": 9158071,
+        "mappingNodes": 3997,
+        "activePathNodes": 3759,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1575,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2266,
+          "tool/text": 30,
+          "tool/code": 1545,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 60127,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1156593,
+      "response": {
+        "bodyBytes": 9161211,
+        "mappingNodes": 3999,
+        "activePathNodes": 3761,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1576,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2267,
+          "tool/text": 30,
+          "tool/code": 1546,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 78888,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1156804,
+      "response": {
+        "bodyBytes": 9164120,
+        "mappingNodes": 4001,
+        "activePathNodes": 3763,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1577,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2268,
+          "tool/text": 30,
+          "tool/code": 1547,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 162408,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157198,
+      "response": {
+        "bodyBytes": 9171278,
+        "mappingNodes": 4006,
+        "activePathNodes": 3768,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1580,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2270,
+          "tool/text": 30,
+          "tool/code": 1550,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "tool",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 173736,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157324,
+      "response": {
+        "bodyBytes": 9172847,
+        "mappingNodes": 4007,
+        "activePathNodes": 3769,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1580,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2271,
+          "tool/text": 30,
+          "tool/code": 1550,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 185984,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157454,
+      "response": {
+        "bodyBytes": 9175756,
+        "mappingNodes": 4009,
+        "activePathNodes": 3771,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1581,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2272,
+          "tool/text": 30,
+          "tool/code": 1551,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 198646,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157436,
+      "response": {
+        "bodyBytes": 9175756,
+        "mappingNodes": 4009,
+        "activePathNodes": 3771,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1581,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2272,
+          "tool/text": 30,
+          "tool/code": 1551,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 211954,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157451,
+      "response": {
+        "bodyBytes": 9175756,
+        "mappingNodes": 4009,
+        "activePathNodes": 3771,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1581,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2272,
+          "tool/text": 30,
+          "tool/code": 1551,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 222697,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157620,
+      "response": {
+        "bodyBytes": 9178663,
+        "mappingNodes": 4011,
+        "activePathNodes": 3773,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1582,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2273,
+          "tool/text": 30,
+          "tool/code": 1552,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 233714,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157581,
+      "response": {
+        "bodyBytes": 9178663,
+        "mappingNodes": 4011,
+        "activePathNodes": 3773,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1582,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2273,
+          "tool/text": 30,
+          "tool/code": 1552,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 244235,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157569,
+      "response": {
+        "bodyBytes": 9178663,
+        "mappingNodes": 4011,
+        "activePathNodes": 3773,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1582,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2273,
+          "tool/text": 30,
+          "tool/code": 1552,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 254910,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157603,
+      "response": {
+        "bodyBytes": 9178663,
+        "mappingNodes": 4011,
+        "activePathNodes": 3773,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1582,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2273,
+          "tool/text": 30,
+          "tool/code": 1552,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 265464,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157569,
+      "response": {
+        "bodyBytes": 9178663,
+        "mappingNodes": 4011,
+        "activePathNodes": 3773,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1582,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2273,
+          "tool/text": 30,
+          "tool/code": 1552,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 276169,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157562,
+      "response": {
+        "bodyBytes": 9178663,
+        "mappingNodes": 4011,
+        "activePathNodes": 3773,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1582,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2273,
+          "tool/text": 30,
+          "tool/code": 1552,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 298169,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 1157631,
+      "response": {
+        "bodyBytes": 9178663,
+        "mappingNodes": 4011,
+        "activePathNodes": 3773,
+        "messages": null,
+        "users": 24,
+        "assistantVisible": 64,
+        "assistantFinal": 21,
+        "toolMessages": 1582,
+        "messageKinds": {
+          "user/text": 24,
+          "assistant/text": 64,
+          "assistant/code": 2273,
+          "tool/text": 30,
+          "tool/code": 1552,
+          "assistant/reasoning_recap": 18,
+          "assistant/thoughts": 49
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": true
+      }
+    },
+    {
+      "relativeMs": 148976,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 299213,
+      "response": {
+        "bodyBytes": 2605228,
+        "mappingNodes": 1125,
+        "activePathNodes": 1125,
+        "messages": null,
+        "users": 7,
+        "assistantVisible": 24,
+        "assistantFinal": 7,
+        "toolMessages": 518,
+        "messageKinds": {
+          "user/text": 7,
+          "assistant/text": 24,
+          "assistant/code": 527,
+          "tool/text": 33,
+          "tool/code": 482,
+          "assistant/thoughts": 41,
+          "assistant/reasoning_recap": 7,
+          "tool/tether_browsing_display": 1,
+          "tool/multimodal_text": 1,
+          "tool/execution_output": 1
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": false
+      }
+    },
+    {
+      "relativeMs": 3474,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "compressedBytes": 120919,
+      "response": {
+        "bodyBytes": 840065,
+        "mappingNodes": 269,
+        "activePathNodes": 268,
+        "messages": null,
+        "users": 2,
+        "assistantVisible": 8,
+        "assistantFinal": 1,
+        "toolMessages": 141,
+        "messageKinds": {
+          "user/text": 2,
+          "tool/text": 7,
+          "assistant/text": 8,
+          "assistant/thoughts": 16,
+          "assistant/reasoning_recap": 2,
+          "assistant/code": 99,
+          "tool/code": 94,
+          "tool/multimodal_text": 40
+        },
+        "hasPreviousPage": null,
+        "hasStartCursor": false,
+        "currentRole": "assistant",
+        "currentStatus": "finished_successfully",
+        "asyncActive": false
+      }
+    }
+  ],
+  "requestGroups": [
+    {
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "count": 17,
+      "responseBodyBytes": [
+        9158071,
+        9161211,
+        9164120,
+        9171278,
+        9172847,
+        9175756,
+        9178663,
+        2605228,
+        840065
+      ],
+      "responseMessageCounts": []
+    }
+  ],
+  "requestBursts": [],
+  "largestJsonResponses": [
+    {
+      "relativeMs": 222697,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9178663,
+      "mappingNodes": 4011,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1582
+    },
+    {
+      "relativeMs": 233714,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9178663,
+      "mappingNodes": 4011,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1582
+    },
+    {
+      "relativeMs": 244235,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9178663,
+      "mappingNodes": 4011,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1582
+    },
+    {
+      "relativeMs": 254910,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9178663,
+      "mappingNodes": 4011,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1582
+    },
+    {
+      "relativeMs": 265464,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9178663,
+      "mappingNodes": 4011,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1582
+    },
+    {
+      "relativeMs": 276169,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9178663,
+      "mappingNodes": 4011,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1582
+    },
+    {
+      "relativeMs": 298169,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9178663,
+      "mappingNodes": 4011,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1582
+    },
+    {
+      "relativeMs": 185984,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9175756,
+      "mappingNodes": 4009,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1581
+    },
+    {
+      "relativeMs": 198646,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9175756,
+      "mappingNodes": 4009,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1581
+    },
+    {
+      "relativeMs": 211954,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9175756,
+      "mappingNodes": 4009,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1581
+    },
+    {
+      "relativeMs": 173736,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9172847,
+      "mappingNodes": 4007,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1580
+    },
+    {
+      "relativeMs": 162408,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9171278,
+      "mappingNodes": 4006,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1580
+    },
+    {
+      "relativeMs": 78888,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9164120,
+      "mappingNodes": 4001,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1577
+    },
+    {
+      "relativeMs": 60127,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9161211,
+      "mappingNodes": 3999,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1576
+    },
+    {
+      "relativeMs": 18097,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 9158071,
+      "mappingNodes": 3997,
+      "messages": null,
+      "users": 24,
+      "assistantVisible": 64,
+      "toolMessages": 1575
+    },
+    {
+      "relativeMs": 148976,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 2605228,
+      "mappingNodes": 1125,
+      "messages": null,
+      "users": 7,
+      "assistantVisible": 24,
+      "toolMessages": 518
+    },
+    {
+      "relativeMs": 3474,
+      "kind": "legacy-full",
+      "query": {
+        "numTurns": null,
+        "hasBefore": false,
+        "beforeKind": null,
+        "includeMessageId": false,
+        "includeHasVersions": null
+      },
+      "bodyBytes": 840065,
+      "mappingNodes": 269,
+      "messages": null,
+      "users": 2,
+      "assistantVisible": 8,
+      "toolMessages": 141
+    }
+  ],
+  "largestAssets": [
+    {
+      "asset": "conversation-small-k3kcucfbrrlc8z48.js",
+      "compressedBytes": 1469638
+    },
+    {
+      "asset": "d8c9beb7-da0d9u648pjr8t8f.js",
+      "compressedBytes": 1144677
+    },
+    {
+      "asset": "8b34dbc2-h9xyg2koz689ttr1.js",
+      "compressedBytes": 1138134
+    },
+    {
+      "asset": "04a8820c-ew1bxinv7ue03nfu.js",
+      "compressedBytes": 1034455
+    },
+    {
+      "asset": "c2675c8c-ext73zh20ozvx8iy.js",
+      "compressedBytes": 680900
+    },
+    {
+      "asset": "4813494d-l3iadyutom9ijssn.js",
+      "compressedBytes": 665864
+    },
+    {
+      "asset": "12e5f202-e9vm08x2vu1idcnl.js",
+      "compressedBytes": 399520
+    },
+    {
+      "asset": "2340486e-i20axdnmh5jcl165.js",
+      "compressedBytes": 245987
+    },
+    {
+      "asset": "root-ng7jmzve.css",
+      "compressedBytes": 245844
+    },
+    {
+      "asset": "25a66342-jcylat2qbl3uiy4q.js",
+      "compressedBytes": 206969
+    },
+    {
+      "asset": "sprites-core-0981e578.svg",
+      "compressedBytes": 204187
+    },
+    {
+      "asset": "2afb55f3-lmq4g146c1t83qq8.js",
+      "compressedBytes": 178116
+    },
+    {
+      "asset": "639d2afb-bdvtwb45bfgbrxdk.js",
+      "compressedBytes": 114564
+    },
+    {
+      "asset": "82782bc9-bwv42r71q8ln7nht.js",
+      "compressedBytes": 102105
+    },
+    {
+      "asset": "3d9e424f-g7g3gns4zh780v1r.js",
+      "compressedBytes": 96040
+    },
+    {
+      "asset": "53e54fd2-n5l1sw1b2gg4hvj4.js",
+      "compressedBytes": 89672
+    },
+    {
+      "asset": "31e01dd8-e4mo3w97mirlzg6d.js",
+      "compressedBytes": 86580
+    },
+    {
+      "asset": "ce52ae67-h7tlc5oeh6o4lhgs.js",
+      "compressedBytes": 85918
+    },
+    {
+      "asset": "bcae0416-j0wb7gki96xrx9sq.js",
+      "compressedBytes": 80884
+    },
+    {
+      "asset": "05d28061-glu0i5l9ddia4pf9.js",
+      "compressedBytes": 72287
+    },
+    {
+      "asset": "manifest-f7b2c122.js",
+      "compressedBytes": 70620
+    },
+    {
+      "asset": "33446f04-fdjr5bmin3otu9us.js",
+      "compressedBytes": 61835
+    },
+    {
+      "asset": "16d56f73-cy72hn28xy2ry7q7.js",
+      "compressedBytes": 57834
+    },
+    {
+      "asset": "zh-hans-gdo938le.css",
+      "compressedBytes": 55120
+    },
+    {
+      "asset": "495cf45b-gjqq2sicxydapg4u.js",
+      "compressedBytes": 53357
+    },
+    {
+      "asset": "343cb406-d69bck6k47arlhci.js",
+      "compressedBytes": 51732
+    },
+    {
+      "asset": "30f82755-e319qcx7eodcmuns.js",
+      "compressedBytes": 46986
+    },
+    {
+      "asset": "a965fc59-gsv2g2leaf3fzfz0.js",
+      "compressedBytes": 44121
+    },
+    {
+      "asset": "noise-watercolor-m3j88gni.webp",
+      "compressedBytes": 42570
+    },
+    {
+      "asset": "bcae0416-m4rhz1mu8dt6mbp6.js",
+      "compressedBytes": 41745
+    }
+  ]
+}

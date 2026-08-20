@@ -18,10 +18,19 @@ declare const GM_registerMenuCommand:
   | ((label: string, callback: () => void) => void)
   | undefined;
 
+declare const __CHATGPT_OPTIMIZER_WORKER_SOURCE__: string;
+
 type Mode = "off" | "balanced" | "aggressive";
 
 interface StoredSettings {
   mode: Mode;
+}
+
+interface StaticCodeBlock {
+  token: string;
+  language: string;
+  code: string;
+  lineCount: number;
 }
 
 interface MaterializedResponse {
@@ -44,6 +53,8 @@ const SCRIPT_NAME = "ChatGPT Long Conversation Performance Fix";
 const SETTINGS_KEY = "chatgpt-performance-fix:settings:v1";
 const FULL_ONCE_PREFIX = "chatgpt-performance-fix:full-once:";
 const CACHE_TTL_MS = 20_000;
+const HISTORY_CACHE_TTL_MS = 5 * 60_000;
+const INTERNAL_RESPONSE_READS = new WeakSet<Response>();
 
 const MODE_OPTIONS: Record<
   Exclude<Mode, "off">,
@@ -54,6 +65,7 @@ const MODE_OPTIONS: Record<
     paginatedMaxTurns: number;
     paginatedRenderTurns: number;
     richTextWarmDistancePx: number;
+    codeEditorWarmDistancePx: number;
   }
 > = {
   balanced: {
@@ -63,6 +75,7 @@ const MODE_OPTIONS: Record<
     paginatedMaxTurns: 2,
     paginatedRenderTurns: 1,
     richTextWarmDistancePx: 8_000,
+    codeEditorWarmDistancePx: 3_000,
   },
   aggressive: {
     minNodeCount: DEFAULT_OPTIMIZER_OPTIONS.minNodeCount,
@@ -71,8 +84,20 @@ const MODE_OPTIONS: Record<
     paginatedMaxTurns: 2,
     paginatedRenderTurns: 1,
     richTextWarmDistancePx: 5_000,
+    codeEditorWarmDistancePx: 1_800,
   },
 };
+
+function legacyOptimizerOptions(mode: Exclude<Mode, "off">) {
+  return {
+    minNodeCount: MODE_OPTIONS[mode].minNodeCount,
+    // A legacy full response may contain hundreds of live tool nodes in the
+    // newest turn. Keep only visible transcript plus the current dependency pair.
+    recentFullTurns: 0,
+    preserveCurrentParent: true,
+    collapseTurnsToQuestionAnswer: true,
+  };
+}
 
 function readSettings(storage: Storage): StoredSettings {
   try {
@@ -91,16 +116,29 @@ function readSettings(storage: Storage): StoredSettings {
 function yieldUntilInteractionIdle(
   pageWindow: Window & typeof globalThis,
 ): Promise<void> {
+  const startedAt = pageWindow.performance.now();
+  const finish = () => {
+    try {
+      pageWindow.performance.measure("chatgpt-perf:history-idle-wait", {
+        start: startedAt,
+        end: pageWindow.performance.now(),
+      });
+    } catch {
+      // Ignore unavailable User Timing options.
+    }
+  };
   return new Promise((resolve) => {
     const afterPaint = () => {
       pageWindow.setTimeout(() => {
         if (typeof pageWindow.requestIdleCallback !== "function") {
+          finish();
           resolve();
           return;
         }
         const waitForUsefulIdleBudget = () => {
           pageWindow.requestIdleCallback((deadline) => {
             if (deadline.timeRemaining() >= 12) {
+              finish();
               resolve();
               return;
             }
@@ -119,6 +157,312 @@ function yieldUntilInteractionIdle(
       pageWindow.requestAnimationFrame(afterPaint);
     }
   });
+}
+
+interface JsonWorkerReply {
+  id: number;
+  ok: boolean;
+  value?: unknown;
+  error?: string;
+}
+
+let jsonWorkerState:
+  | {
+      worker: Worker;
+      nextId: number;
+      pending: Map<
+        number,
+        {
+          resolve: (value: unknown) => void;
+          reject: (error: Error) => void;
+          startedAt: number;
+          operation: string;
+        }
+      >;
+    }
+  | null
+  | undefined;
+
+function ensureJsonWorker(
+  pageWindow: Window & typeof globalThis,
+): Exclude<typeof jsonWorkerState, null | undefined> | null {
+  if (jsonWorkerState !== undefined) return jsonWorkerState;
+  if (typeof pageWindow.Worker !== "function") {
+    jsonWorkerState = null;
+    return null;
+  }
+  try {
+    const source = __CHATGPT_OPTIMIZER_WORKER_SOURCE__;;
+    const url = pageWindow.URL.createObjectURL(
+      new pageWindow.Blob([source], { type: "application/javascript" }),
+    );
+    const worker = new pageWindow.Worker(url, {
+      name: "chatgpt-performance-json",
+    });
+    pageWindow.URL.revokeObjectURL(url);
+    const state = {
+      worker,
+      nextId: 1,
+      pending: new Map<
+        number,
+        {
+          resolve: (value: unknown) => void;
+          reject: (error: Error) => void;
+          startedAt: number;
+          operation: string;
+        }
+      >(),
+    };
+    worker.addEventListener("message", (event: MessageEvent<JsonWorkerReply>) => {
+      const reply = event.data;
+      const pending = state.pending.get(reply.id);
+      if (!pending) return;
+      state.pending.delete(reply.id);
+      const finishedAt = pageWindow.performance.now();
+      const elapsed = finishedAt - pending.startedAt;
+      try {
+        pageWindow.performance.measure(
+          `chatgpt-perf:worker:${pending.operation}`,
+          {
+            start: pending.startedAt,
+            end: finishedAt,
+            detail: { durationMs: elapsed },
+          },
+        );
+      } catch {
+        // Older browsers may not support PerformanceMeasureOptions.
+      }
+      const root = pageWindow.document.documentElement;
+      const count = Number(root.dataset.chatgptJsonWorkerParses ?? "0");
+      const total = Number(root.dataset.chatgptJsonWorkerTotalMs ?? "0");
+      root.dataset.chatgptJsonWorkerParses = String(count + 1);
+      root.dataset.chatgptJsonWorkerTotalMs = String(Math.round(total + elapsed));
+      if (reply.ok) pending.resolve(reply.value);
+      else pending.reject(new Error(reply.error ?? "Worker JSON parse failed"));
+    });
+    worker.addEventListener("error", () => {
+      for (const pending of state.pending.values()) {
+        pending.reject(new Error("JSON worker failed"));
+      }
+      state.pending.clear();
+      worker.terminate();
+      jsonWorkerState = null;
+    });
+    jsonWorkerState = state;
+    return state;
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] Could not create JSON worker`, error);
+    jsonWorkerState = null;
+    return null;
+  }
+}
+
+async function runOptimizerWorker<T>(
+  pageWindow: Window & typeof globalThis,
+  request: Record<string, unknown> & { text?: string; buffer?: ArrayBuffer },
+  transfer: Transferable[] = [],
+): Promise<T> {
+  const state = ensureJsonWorker(pageWindow);
+  if (!state) throw new Error("Optimizer worker is unavailable");
+  const id = state.nextId++;
+  return await new Promise<T>((resolve, reject) => {
+    state.pending.set(id, {
+      resolve: resolve as (value: unknown) => void,
+      reject,
+      startedAt: pageWindow.performance.now(),
+      operation: String(request.operation ?? "unknown"),
+    });
+    state.worker.postMessage({ id, ...request }, transfer);
+  });
+}
+
+interface LegacyWorkerResult {
+  payload: Record<string, unknown>;
+  stats: OptimizationStats;
+}
+
+interface PaginatedWorkerResult {
+  payload: PaginatedConversationPayload;
+  stats: PaginatedOptimizationStats;
+  chunks: ConversationMessage[][];
+  codeBlocks?: StaticCodeBlock[];
+  active: boolean;
+  cacheable: boolean;
+}
+
+async function optimizeLegacyOffMain(
+  pageWindow: Window & typeof globalThis,
+  text: string,
+  options: Parameters<typeof optimizeConversationPayload>[1],
+): Promise<LegacyWorkerResult> {
+  try {
+    return await runOptimizerWorker<LegacyWorkerResult>(pageWindow, {
+      operation: "optimize-legacy",
+      text,
+      legacyOptions: options,
+    });
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] Worker legacy optimization fell back`, error);
+    const payload = JSON.parse(text) as Record<string, unknown>;
+    return optimizeConversationPayload(payload, options) as LegacyWorkerResult;
+  }
+}
+
+async function optimizePaginatedOffMain(
+  pageWindow: Window & typeof globalThis,
+  text: string,
+  apiKind: "paginated-initial" | "paginated-messages",
+  mode: Exclude<Mode, "off">,
+): Promise<PaginatedWorkerResult> {
+  try {
+    return await runOptimizerWorker<PaginatedWorkerResult>(pageWindow, {
+      operation: "optimize-paginated",
+      text,
+      apiKind,
+      recentFullTurns: MODE_OPTIONS[mode].recentFullTurns,
+      lightweightCodeBlocks: true,
+      chunkOptions: {
+        maxTurns: MODE_OPTIONS[mode].paginatedRenderTurns,
+        maxMessages: Number.MAX_SAFE_INTEGER,
+        maxBytes: Number.MAX_SAFE_INTEGER,
+        allowSplitTurns: false,
+      },
+    });
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] Worker paginated optimization fell back`, error);
+    const payload = JSON.parse(text) as PaginatedConversationPayload;
+    const active = hasActivePaginatedWork(payload);
+    const initial = apiKind === "paginated-initial";
+    const result = optimizePaginatedConversationPayload(payload, {
+      recentFullTurns: initial && active ? MODE_OPTIONS[mode].recentFullTurns : 0,
+      forceKeepMessageIds: initial ? requiredInitialMessageIds(payload) : [],
+      collapseTurnsToQuestionAnswer:
+        apiKind === "paginated-messages" || (initial && !active),
+    });
+    return {
+      payload: result.payload,
+      stats: result.stats,
+      chunks: splitPaginatedMessagesNewestFirst(result.payload.messages ?? [], {
+        maxTurns: MODE_OPTIONS[mode].paginatedRenderTurns,
+        maxMessages: Number.MAX_SAFE_INTEGER,
+        maxBytes: Number.MAX_SAFE_INTEGER,
+        allowSplitTurns: false,
+      }),
+      active,
+      cacheable: initial && isIdlePaginatedConversation(payload),
+    };
+  }
+}
+
+interface PaginatedJobProbe {
+  token: string;
+  complete: boolean;
+  cursor: string | null;
+  messageCount: number;
+}
+
+interface PreparedPaginatedResponse {
+  response: Response;
+  workerJobToken?: string;
+}
+
+async function startPaginatedWorkerJob(
+  pageWindow: Window & typeof globalThis,
+  buffer: ArrayBuffer,
+  requireFinal: boolean,
+): Promise<PaginatedJobProbe> {
+  return runOptimizerWorker<PaginatedJobProbe>(
+    pageWindow,
+    {
+      operation: "start-paginated-job",
+      buffer,
+      requireFinal,
+    },
+    [buffer],
+  );
+}
+
+async function prependPaginatedWorkerJob(
+  pageWindow: Window & typeof globalThis,
+  token: string,
+  buffer: ArrayBuffer,
+): Promise<PaginatedJobProbe> {
+  return runOptimizerWorker<PaginatedJobProbe>(
+    pageWindow,
+    {
+      operation: "prepend-paginated-job",
+      token,
+      buffer,
+    },
+    [buffer],
+  );
+}
+
+async function finishPaginatedWorkerJob(
+  pageWindow: Window & typeof globalThis,
+  token: string,
+  apiKind: "paginated-initial" | "paginated-messages",
+  mode: Exclude<Mode, "off">,
+): Promise<PaginatedWorkerResult> {
+  return runOptimizerWorker<PaginatedWorkerResult>(pageWindow, {
+    operation: "finish-paginated-job",
+    token,
+    apiKind,
+    recentFullTurns: MODE_OPTIONS[mode].recentFullTurns,
+    lightweightCodeBlocks: true,
+    chunkOptions: {
+      maxTurns: MODE_OPTIONS[mode].paginatedRenderTurns,
+      maxMessages: Number.MAX_SAFE_INTEGER,
+      maxBytes: Number.MAX_SAFE_INTEGER,
+      allowSplitTurns: false,
+    },
+  });
+}
+
+async function cancelPaginatedWorkerJob(
+  pageWindow: Window & typeof globalThis,
+  token: string,
+): Promise<void> {
+  try {
+    await runOptimizerWorker(pageWindow, {
+      operation: "cancel-paginated-job",
+      token,
+    });
+  } catch {
+    // The worker may already have failed/terminated.
+  }
+}
+
+async function parseJsonOffMain<T>(
+  pageWindow: Window & typeof globalThis,
+  text: string,
+): Promise<T> {
+  // Small payloads are faster locally; large conversation pages must not block
+  // the same main thread that owns the sidebar and all input handling.
+  if (text.length < 128 * 1024) return JSON.parse(text) as T;
+  const state = ensureJsonWorker(pageWindow);
+  if (!state) return JSON.parse(text) as T;
+  const id = state.nextId++;
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      state.pending.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        startedAt: pageWindow.performance.now(),
+      });
+      state.worker.postMessage({ id, operation: "parse", text });
+    });
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] Worker parse fell back to main thread`, error);
+    return JSON.parse(text) as T;
+  }
+}
+
+async function responseJsonOffMain<T>(
+  pageWindow: Window & typeof globalThis,
+  response: Response,
+): Promise<T> {
+  return parseJsonOffMain<T>(pageWindow, await response.text());
 }
 
 function rewriteGetRequest(
@@ -164,6 +508,20 @@ function rewriteGetRequest(
   return [new pageWindow.URL(rewrittenUrl).href, rewrittenInit];
 }
 
+function findConversationCodeMirrorContainer(
+  pageWindow: Window & typeof globalThis,
+  target: Element,
+): Element | null {
+  if (!(target instanceof pageWindow.Element)) return null;
+  const container = target.closest('[class*="_codemirror"]');
+  if (!container) return null;
+  return container.closest(
+    '[data-message-id], .markdown, [class*="MarkdownContent"], [class*="SmoothedMarkdown"]',
+  )
+    ? container
+    : null;
+}
+
 function installManualPaginationObserver(
   pageWindow: Window & typeof globalThis,
 ): void {
@@ -185,6 +543,10 @@ function installManualPaginationObserver(
     private button?: HTMLButtonElement;
     private loading = false;
     private fallbackResetTimer?: number;
+    private readonly deferredCodeMirrorTargets = new Map<
+      Element,
+      MutationObserver
+    >();
 
     constructor(
       callback: IntersectionObserverCallback,
@@ -304,15 +666,51 @@ function installManualPaginationObserver(
     }
 
     observe(target: Element): void {
-      this.ensureObserver(target).observe(target);
+      const observer = this.ensureObserver(target);
+      const container = findConversationCodeMirrorContainer(pageWindow, target);
+      if (
+        container &&
+        container.getAttribute("data-chatgpt-rich-editor-state") !== "hot"
+      ) {
+        if (this.deferredCodeMirrorTargets.has(target)) return;
+        const attributeObserver = new pageWindow.MutationObserver(() => {
+          if (
+            container.getAttribute("data-chatgpt-rich-editor-state") !== "hot"
+          ) {
+            return;
+          }
+          attributeObserver.disconnect();
+          this.deferredCodeMirrorTargets.delete(target);
+          observer.observe(target);
+          const root = pageWindow.document.documentElement;
+          const count = Number(root.dataset.chatgptCodeMirrorIoResumed ?? "0");
+          root.dataset.chatgptCodeMirrorIoResumed = String(count + 1);
+        });
+        attributeObserver.observe(container, {
+          attributes: true,
+          attributeFilter: ["data-chatgpt-rich-editor-state"],
+        });
+        this.deferredCodeMirrorTargets.set(target, attributeObserver);
+        const root = pageWindow.document.documentElement;
+        const count = Number(root.dataset.chatgptCodeMirrorIoDeferred ?? "0");
+        root.dataset.chatgptCodeMirrorIoDeferred = String(count + 1);
+        return;
+      }
+      observer.observe(target);
     }
 
     unobserve(target: Element): void {
+      this.deferredCodeMirrorTargets.get(target)?.disconnect();
+      this.deferredCodeMirrorTargets.delete(target);
       this.observer?.unobserve(target);
     }
 
     disconnect(): void {
       this.observer?.disconnect();
+      for (const observer of this.deferredCodeMirrorTargets.values()) {
+        observer.disconnect();
+      }
+      this.deferredCodeMirrorTargets.clear();
       if (this.fallbackResetTimer != null) {
         pageWindow.clearTimeout(this.fallbackResetTimer);
       }
@@ -561,16 +959,237 @@ html[data-chatgpt-performance-fix="large"] [data-message-id] {
 }
 
 
+const staticCodeBlocks = new Map<string, StaticCodeBlock>();
+const staticCodeHydrated = new WeakSet<Element>();
+const staticCodeFillQueue: Array<{
+  block: StaticCodeBlock;
+  container: HTMLElement;
+  code: HTMLElement;
+  copy: HTMLButtonElement;
+}> = [];
+let staticCodeFillHandle: number | null = null;
+let staticCodeHydratorInstalled = false;
+
+function scheduleStaticCodeFill(pageWindow: Window & typeof globalThis): void {
+  if (staticCodeFillHandle != null) return;
+  const drain = (deadline?: IdleDeadline) => {
+    staticCodeFillHandle = null;
+    let filled = 0;
+    while (staticCodeFillQueue.length > 0 && filled < 2) {
+      if (deadline && deadline.timeRemaining() < 8) break;
+      const item = staticCodeFillQueue.shift()!;
+      if (!item.container.isConnected) continue;
+      item.code.textContent = item.block.code;
+      item.copy.disabled = false;
+      item.container.dataset.chatgptStaticCodeState = "ready";
+      filled += 1;
+    }
+    if (staticCodeFillQueue.length > 0) scheduleStaticCodeFill(pageWindow);
+  };
+  if (typeof pageWindow.requestIdleCallback === "function") {
+    staticCodeFillHandle = pageWindow.requestIdleCallback(drain);
+  } else {
+    staticCodeFillHandle = pageWindow.requestAnimationFrame(() => drain());
+  }
+}
+
+function staticCodeToken(anchor: HTMLAnchorElement): string | null {
+  try {
+    const url = new URL(anchor.href);
+    if (url.origin !== "https://chatgpt.com") return null;
+    const params = new URLSearchParams(url.hash.slice(1));
+    return params.get("cgptperf-code");
+  } catch {
+    return null;
+  }
+}
+
+const STATIC_CODE_MARKER_RE =
+  /\[代码块\]\(https:\/\/chatgpt\.com\/#cgptperf-code=([^&\s)]+)&lines=\d+\)/g;
+
+function restoreStaticCodeMarkdown(text: string): string {
+  if (!text.includes("#cgptperf-code=")) return text;
+  return text.replace(STATIC_CODE_MARKER_RE, (full, token: string) => {
+    const block = staticCodeBlocks.get(token);
+    if (!block) return full;
+    const fence = block.code.includes("```") ? "````" : "```";
+    const language = block.language ? block.language : "";
+    return `${fence}${language}\n${block.code}\n${fence}`;
+  });
+}
+
+function restoreStaticCodeTextarea(
+  pageWindow: Window & typeof globalThis,
+  textarea: HTMLTextAreaElement,
+): void {
+  if (!textarea.value.includes("#cgptperf-code=")) return;
+  const restored = restoreStaticCodeMarkdown(textarea.value);
+  if (restored === textarea.value) return;
+  const setter = Object.getOwnPropertyDescriptor(
+    pageWindow.HTMLTextAreaElement.prototype,
+    "value",
+  )?.set;
+  setter?.call(textarea, restored);
+  textarea.dispatchEvent(
+    new pageWindow.InputEvent("input", {
+      bubbles: true,
+      inputType: "insertReplacementText",
+      data: null,
+    }),
+  );
+}
+
+function restoreStaticCodeRequestInit(init?: RequestInit): RequestInit | undefined {
+  if (!init || typeof init.body !== "string" || !init.body.includes("#cgptperf-code=")) {
+    return init;
+  }
+  const body = restoreStaticCodeMarkdown(init.body);
+  return body === init.body ? init : { ...init, body };
+}
+
+function hydrateStaticCodeAnchor(
+  pageWindow: Window & typeof globalThis,
+  anchor: HTMLAnchorElement,
+): void {
+  if (staticCodeHydrated.has(anchor)) return;
+  const token = staticCodeToken(anchor);
+  const block = token ? staticCodeBlocks.get(token) : undefined;
+  if (!token || !block) return;
+  staticCodeHydrated.add(anchor);
+
+  const lineHeight = 20;
+  const collapsedHeight = Math.min(420, Math.max(92, block.lineCount * lineHeight + 44));
+  const container = pageWindow.document.createElement("div");
+  container.dataset.chatgptStaticCode = token;
+  container.dataset.chatgptStaticCodeState = "loading";
+  container.style.height = `${collapsedHeight}px`;
+
+  const header = pageWindow.document.createElement("div");
+  header.dataset.chatgptStaticCodeHeader = "true";
+  const label = pageWindow.document.createElement("span");
+  label.textContent = block.language || "code";
+  const actions = pageWindow.document.createElement("span");
+  actions.dataset.chatgptStaticCodeActions = "true";
+
+  const expand = pageWindow.document.createElement("button");
+  expand.type = "button";
+  expand.textContent = "展开";
+  expand.addEventListener("click", () => {
+    const expanded = container.dataset.chatgptStaticCodeExpanded === "true";
+    container.dataset.chatgptStaticCodeExpanded = expanded ? "false" : "true";
+    container.style.height = expanded ? `${collapsedHeight}px` : "auto";
+    expand.textContent = expanded ? "展开" : "收起";
+  });
+
+  const copy = pageWindow.document.createElement("button");
+  copy.type = "button";
+  copy.textContent = "复制";
+  copy.disabled = true;
+  copy.addEventListener("click", async () => {
+    try {
+      await pageWindow.navigator.clipboard.writeText(block.code);
+      copy.textContent = "已复制";
+      pageWindow.setTimeout(() => (copy.textContent = "复制"), 1_200);
+    } catch {
+      copy.textContent = "复制失败";
+      pageWindow.setTimeout(() => (copy.textContent = "复制"), 1_200);
+    }
+  });
+  actions.append(expand, copy);
+  header.append(label, actions);
+
+  const pre = pageWindow.document.createElement("pre");
+  const code = pageWindow.document.createElement("code");
+  code.textContent = "";
+  pre.append(code);
+  container.append(header, pre);
+
+  const replaceTarget =
+    anchor.parentElement?.tagName === "P" && anchor.parentElement.childNodes.length === 1
+      ? anchor.parentElement
+      : anchor;
+  replaceTarget.replaceWith(container);
+
+  const rect = container.getBoundingClientRect();
+  if (rect.bottom >= 0 && rect.top <= pageWindow.innerHeight) {
+    code.textContent = block.code;
+    copy.disabled = false;
+    container.dataset.chatgptStaticCodeState = "ready";
+  } else {
+    staticCodeFillQueue.push({ block, container, code, copy });
+    scheduleStaticCodeFill(pageWindow);
+  }
+}
+
+function scanStaticCodeMarkers(
+  pageWindow: Window & typeof globalThis,
+  node: Node,
+): void {
+  if (!(node instanceof pageWindow.Element)) return;
+  const messageScope =
+    node.matches('[data-message-id]') || node.closest('[data-message-id]')
+      ? node
+      : node.querySelector('[data-message-id]');
+  if (!messageScope) return;
+  if (node instanceof pageWindow.HTMLTextAreaElement) {
+    restoreStaticCodeTextarea(pageWindow, node);
+  }
+  if (node instanceof pageWindow.HTMLAnchorElement) {
+    hydrateStaticCodeAnchor(pageWindow, node);
+  }
+  for (const textarea of node.querySelectorAll<HTMLTextAreaElement>("textarea")) {
+    restoreStaticCodeTextarea(pageWindow, textarea);
+  }
+  for (const anchor of node.querySelectorAll<HTMLAnchorElement>(
+    'a[href^="https://chatgpt.com/#cgptperf-code="]',
+  )) {
+    hydrateStaticCodeAnchor(pageWindow, anchor);
+  }
+}
+
+function installStaticCodeHydrator(
+  pageWindow: Window & typeof globalThis,
+): void {
+  if (staticCodeHydratorInstalled) return;
+  staticCodeHydratorInstalled = true;
+  const root = pageWindow.document.documentElement;
+  if (!root) return;
+  scanStaticCodeMarkers(pageWindow, root);
+  const observer = new pageWindow.MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) scanStaticCodeMarkers(pageWindow, node);
+    }
+  });
+  observer.observe(root, { childList: true, subtree: true });
+}
+
+function registerStaticCodeBlocks(
+  pageWindow: Window & typeof globalThis,
+  blocks: StaticCodeBlock[] | undefined,
+): void {
+  if (!blocks?.length) return;
+  for (const block of blocks) staticCodeBlocks.set(block.token, block);
+  while (staticCodeBlocks.size > 1_024) {
+    const oldest = staticCodeBlocks.keys().next().value;
+    if (typeof oldest !== "string") break;
+    staticCodeBlocks.delete(oldest);
+  }
+  installStaticCodeHydrator(pageWindow);
+  scanStaticCodeMarkers(pageWindow, pageWindow.document.documentElement);
+}
+
 function installRichTextPerformanceFix(
   pageWindow: Window & typeof globalThis,
   warmDistancePx: number,
+  editorWarmDistancePx: number,
 ): void {
   const marker = "__chatgptRichTextPerformanceFixInstalled";
   if (Reflect.get(pageWindow, marker)) return;
   Reflect.set(pageWindow, marker, true);
 
-  // SmoothedMarkdown's module (stable chunk id 2afb55f3 in both captured page
-  // loads) uses document.visibilityState only to decide whether to synthesize its
+  const smoothedMarkdownSourceHints = new Set<string>(["/2afb55f3-"]);
+
+  // SmoothedMarkdown uses document.visibilityState only to decide whether to synthesize its
   // 16ms character-by-character markdown reparse loop. Return "hidden" only to
   // that module so it takes its own fast path and renders the current full text.
   try {
@@ -597,7 +1216,9 @@ function installRichTextPerformanceFix(
           const actual = nativeVisibilityGet.call(this) as DocumentVisibilityState;
           if (this === pageWindow.document && actual !== "hidden") {
             const stack = new Error().stack ?? "";
-            if (stack.includes("/2afb55f3-")) {
+            if (
+              [...smoothedMarkdownSourceHints].some((hint) => stack.includes(hint))
+            ) {
               pageWindow.document.documentElement.dataset.chatgptSmoothedMarkdownBypass =
                 "enabled";
               return "hidden";
@@ -652,6 +1273,58 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
   min-height: 5rem;
 }
 
+html [data-chatgpt-static-code] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 92px;
+  overflow: hidden;
+  border: 1px solid rgba(127, 127, 127, .22);
+  border-radius: 10px;
+  background: var(--main-surface-secondary, rgba(127, 127, 127, .08));
+  margin: .75rem 0;
+}
+html [data-chatgpt-static-code-header] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(127, 127, 127, .18);
+  font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+html [data-chatgpt-static-code-actions] {
+  display: inline-flex;
+  gap: 6px;
+}
+html [data-chatgpt-static-code] button {
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 7px;
+  background: rgba(127, 127, 127, .14);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+html [data-chatgpt-static-code] button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+html [data-chatgpt-static-code] pre {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre;
+  tab-size: 2;
+  font: 12px/20px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+html [data-chatgpt-static-code-state="loading"] pre {
+  background: linear-gradient(90deg, transparent, rgba(127,127,127,.08), transparent);
+}
+
 @media print {
   html [class*="SmoothedCodeBlock"],
   html [class*="_codemirror"],
@@ -686,6 +1359,10 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
   class RichTextResizeObserver implements ResizeObserver {
     private readonly native: ResizeObserver;
     private readonly skipped = new Set<Element>();
+    private readonly deferredCodeMirrorTargets = new Map<
+      Element,
+      MutationObserver
+    >();
 
     constructor(callback: ResizeObserverCallback) {
       this.native = new NativeResizeObserver((entries) => callback(entries, this));
@@ -694,9 +1371,51 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
     observe(target: Element, options?: ResizeObserverOptions): void {
       if (isSmoothedCodeMeasurement(target)) {
         this.skipped.add(target);
+        const stack = new Error().stack ?? "";
+        for (const match of stack.matchAll(
+          /https:\/\/[^/]+\/(?:cdn\/)?assets\/([^/:]+\.js)/g,
+        )) {
+          const filename = match[1];
+          if (!filename || filename.includes("performance-fix")) continue;
+          const hint = `/${filename.split("-")[0]}-`;
+          smoothedMarkdownSourceHints.add(hint);
+        }
         const root = pageWindow.document.documentElement;
+        root.dataset.chatgptSmoothedMarkdownSourceCount = String(
+          smoothedMarkdownSourceHints.size,
+        );
         const count = Number(root.dataset.chatgptRichTextSkippedResizeObservers ?? "0");
         root.dataset.chatgptRichTextSkippedResizeObservers = String(count + 1);
+        return;
+      }
+
+      const container = findConversationCodeMirrorContainer(pageWindow, target);
+      if (
+        container &&
+        container.getAttribute("data-chatgpt-rich-editor-state") !== "hot"
+      ) {
+        if (this.deferredCodeMirrorTargets.has(target)) return;
+        const attributeObserver = new pageWindow.MutationObserver(() => {
+          if (
+            container.getAttribute("data-chatgpt-rich-editor-state") !== "hot"
+          ) {
+            return;
+          }
+          attributeObserver.disconnect();
+          this.deferredCodeMirrorTargets.delete(target);
+          this.native.observe(target, options);
+          const root = pageWindow.document.documentElement;
+          const count = Number(root.dataset.chatgptCodeMirrorRoResumed ?? "0");
+          root.dataset.chatgptCodeMirrorRoResumed = String(count + 1);
+        });
+        attributeObserver.observe(container, {
+          attributes: true,
+          attributeFilter: ["data-chatgpt-rich-editor-state"],
+        });
+        this.deferredCodeMirrorTargets.set(target, attributeObserver);
+        const root = pageWindow.document.documentElement;
+        const count = Number(root.dataset.chatgptCodeMirrorRoDeferred ?? "0");
+        root.dataset.chatgptCodeMirrorRoDeferred = String(count + 1);
         return;
       }
       this.native.observe(target, options);
@@ -704,11 +1423,17 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
 
     unobserve(target: Element): void {
       if (this.skipped.delete(target)) return;
+      this.deferredCodeMirrorTargets.get(target)?.disconnect();
+      this.deferredCodeMirrorTargets.delete(target);
       this.native.unobserve(target);
     }
 
     disconnect(): void {
       this.skipped.clear();
+      for (const observer of this.deferredCodeMirrorTargets.values()) {
+        observer.disconnect();
+      }
+      this.deferredCodeMirrorTargets.clear();
       this.native.disconnect();
     }
   }
@@ -854,6 +1579,10 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
   };
 
   const effectiveWarmDistance = Math.max(1_500, Math.floor(warmDistancePx));
+  const effectiveEditorWarmDistance = Math.max(
+    800,
+    Math.floor(editorWarmDistancePx),
+  );
 
   const scanWarmDistance = () => {
     warmScanFrame = null;
@@ -868,9 +1597,13 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
         continue;
       }
       const rect = element.getBoundingClientRect();
+      const itemWarmDistance =
+        item.attribute === "data-chatgpt-rich-editor-state"
+          ? effectiveEditorWarmDistance
+          : effectiveWarmDistance;
       if (
-        rect.bottom < -effectiveWarmDistance ||
-        rect.top > pageWindow.innerHeight + effectiveWarmDistance
+        rect.bottom < -itemWarmDistance ||
+        rect.top > pageWindow.innerHeight + itemWarmDistance
       ) {
         continue;
       }
@@ -923,6 +1656,9 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
   const root = pageWindow.document.documentElement;
   if (root) {
     root.dataset.chatgptRichTextWarmDistancePx = String(effectiveWarmDistance);
+    root.dataset.chatgptCodeEditorWarmDistancePx = String(
+      effectiveEditorWarmDistance,
+    );
     scanForHeavyElements(root);
     pageWindow.addEventListener("scroll", scheduleWarmScan, {
       capture: true,
@@ -1033,13 +1769,191 @@ function cloneMaterializedResponse(
   return clone;
 }
 
+async function readResponseText(response: Response): Promise<string> {
+  INTERNAL_RESPONSE_READS.add(response);
+  try {
+    return await response.text();
+  } finally {
+    INTERNAL_RESPONSE_READS.delete(response);
+  }
+}
+
+interface LegacyResponseFallbackValue {
+  body: string;
+  payload: Record<string, unknown>;
+  fingerprint: string;
+  stats?: OptimizationStats;
+}
+
+async function fingerprintResponseBody(
+  pageWindow: Window & typeof globalThis,
+  body: string,
+): Promise<string> {
+  try {
+    const encoded = new pageWindow.TextEncoder().encode(body);
+    const digest = await pageWindow.crypto.subtle.digest("SHA-256", encoded);
+    return `${body.length}:${Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0")
+    ).join("")}`;
+  } catch {
+    // The body length plus stable server fields is enough for a conservative
+    // fallback when SubtleCrypto is unavailable.
+    const updateTime = body.match(/"update_time"\s*:\s*([^,}\n]+)/)?.[1] ?? "";
+    const currentNode = body.match(/"current_node"\s*:\s*"([^"]+)"/)?.[1] ?? "";
+    return `${body.length}:${updateTime}:${currentNode}:${body.slice(-256)}`;
+  }
+}
+
+function cloneJsonPayload<T>(
+  pageWindow: Window & typeof globalThis,
+  payload: T,
+  body: string,
+): T {
+  try {
+    return pageWindow.structuredClone(payload);
+  } catch {
+    return JSON.parse(body) as T;
+  }
+}
+
+function installLegacyResponseFallback(
+  pageWindow: Window & typeof globalThis,
+  mode: Exclude<Mode, "off">,
+): { clear: () => void } {
+  const marker = "__chatgptPerformanceFixResponseFallback";
+  const existing = Reflect.get(pageWindow, marker) as
+    | { clear?: () => void }
+    | undefined;
+  if (existing?.clear) return { clear: existing.clear };
+
+  const prototype = pageWindow.Response?.prototype;
+  if (!prototype) return { clear: () => undefined };
+
+  const nativeJson = prototype.json;
+  const nativeText = prototype.text;
+  const perResponse = new WeakMap<Response, Promise<LegacyResponseFallbackValue>>();
+  const byUrl = new Map<string, LegacyResponseFallbackValue>();
+
+  const incrementMetric = (name: string): void => {
+    const root = pageWindow.document.documentElement;
+    const current = Number(root.dataset[name] ?? "0");
+    root.dataset[name] = String(current + 1);
+  };
+
+  const shouldHandle = (response: Response): boolean => {
+    if (INTERNAL_RESPONSE_READS.has(response) || !response.ok || response.bodyUsed) {
+      return false;
+    }
+    const match = matchConversationApiUrl(response.url, pageWindow.location.href);
+    if (match?.kind !== "legacy-full") return false;
+    try {
+      const url = new pageWindow.URL(response.url, pageWindow.location.href);
+      return !["1", "true"].includes(
+        url.searchParams.get("include_full_conversation") ?? "",
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const process = (response: Response): Promise<LegacyResponseFallbackValue> => {
+    const previous = perResponse.get(response);
+    if (previous) return previous;
+
+    const task = (async () => {
+      const originalBody = await nativeText.call(response);
+      const fingerprint = await fingerprintResponseBody(pageWindow, originalBody);
+      const cached = byUrl.get(response.url);
+      if (cached?.fingerprint === fingerprint) {
+        incrementMetric("chatgptLegacyFallbackCacheHits");
+        return cached;
+      }
+
+      let parsed = JSON.parse(originalBody) as Record<string, unknown>;
+      let body = originalBody;
+      let stats: OptimizationStats | undefined;
+      try {
+        const result = optimizeConversationPayload(
+          parsed,
+          legacyOptimizerOptions(mode),
+        );
+        stats = result.stats;
+        if (result.stats.changed) {
+          parsed = result.payload;
+          body = JSON.stringify(result.payload);
+          incrementMetric("chatgptLegacyFallbackOptimized");
+          const root = pageWindow.document.documentElement;
+          root.dataset.chatgptLegacyFallbackOriginalNodes = String(
+            result.stats.originalNodes,
+          );
+          root.dataset.chatgptLegacyFallbackKeptNodes = String(
+            result.stats.keptNodes,
+          );
+          root.dataset.chatgptPerformanceFix = "large";
+        }
+      } catch (error) {
+        console.warn(`[${SCRIPT_NAME}] Legacy response fallback failed`, error);
+      }
+
+      const value = { body, payload: parsed, fingerprint, stats };
+      byUrl.set(response.url, value);
+      while (byUrl.size > 8) {
+        const oldest = byUrl.keys().next().value;
+        if (typeof oldest !== "string") break;
+        byUrl.delete(oldest);
+      }
+      return value;
+    })();
+    perResponse.set(response, task);
+    return task;
+  };
+
+  const patchedJson = function (this: Response): Promise<unknown> {
+    if (!shouldHandle(this)) return nativeJson.call(this);
+    return process(this).then((value) =>
+      cloneJsonPayload(pageWindow, value.payload, value.body)
+    );
+  };
+  const patchedText = function (this: Response): Promise<string> {
+    if (!shouldHandle(this)) return nativeText.call(this);
+    return process(this).then((value) => value.body);
+  };
+
+  try {
+    Object.defineProperty(patchedJson, "name", { value: "json" });
+    Object.defineProperty(patchedText, "name", { value: "text" });
+    Object.defineProperty(prototype, "json", {
+      configurable: true,
+      writable: true,
+      value: patchedJson,
+    });
+    Object.defineProperty(prototype, "text", {
+      configurable: true,
+      writable: true,
+      value: patchedText,
+    });
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] Could not install response fallback`, error);
+    return { clear: () => undefined };
+  }
+
+  const controller = {
+    clear: () => {
+      byUrl.clear();
+    },
+  };
+  Reflect.set(pageWindow, marker, controller);
+  pageWindow.document.documentElement.dataset.chatgptResponseFallback = "enabled";
+  return controller;
+}
+
 async function materializeAndOptimize(
   pageWindow: Window & typeof globalThis,
   response: Response,
   mode: Exclude<Mode, "off">,
   exposedUrl: string = response.url,
 ): Promise<MaterializedResponse> {
-  const originalBody = await response.text();
+  const originalBody = await readResponseText(response);
   let body = originalBody;
   let optimized = false;
   let cacheable = false;
@@ -1047,8 +1961,11 @@ async function materializeAndOptimize(
 
   if (response.ok) {
     try {
-      const parsed = JSON.parse(originalBody) as Record<string, unknown>;
-      const result = optimizeConversationPayload(parsed, MODE_OPTIONS[mode]);
+      const result = await optimizeLegacyOffMain(
+        pageWindow,
+        originalBody,
+        MODE_OPTIONS[mode],
+      );
       stats = result.stats;
       if (result.stats.changed) {
         body = JSON.stringify(result.payload);
@@ -1091,7 +2008,7 @@ async function materializeAndOptimizePaginated(
   requestWasClamped: boolean,
   createLocalCursor: () => string,
 ): Promise<MaterializedResponse> {
-  const originalBody = await response.text();
+  const originalBody = await readResponseText(response);
   let body = originalBody;
   let optimized = requestWasClamped;
   let stats: PaginatedOptimizationStats | undefined;
@@ -1101,43 +2018,25 @@ async function materializeAndOptimizePaginated(
 
   if (response.ok) {
     try {
-      const parsed = JSON.parse(originalBody) as Record<string, unknown>;
-      const activeInitial =
-        apiKind === "paginated-initial" && hasActivePaginatedWork(parsed);
-      cacheable =
-        apiKind === "paginated-initial" && isIdlePaginatedConversation(parsed);
-      const result = optimizePaginatedConversationPayload(parsed, {
-        // Preserve the whole newest turn only while the server reports live work.
-        // A finished tool leaf keeps just its invocation/result dependency pair.
-        recentFullTurns:
-          apiKind === "paginated-initial" && activeInitial
-            ? MODE_OPTIONS[mode].recentFullTurns
-            : 0,
-        forceKeepMessageIds:
-          apiKind === "paginated-initial" ? requiredInitialMessageIds(parsed) : [],
-        collapseTurnsToQuestionAnswer:
-          apiKind === "paginated-messages" ||
-          (apiKind === "paginated-initial" && !activeInitial),
-      });
+      const result = workerJobToken
+        ? await finishPaginatedWorkerJob(
+            pageWindow,
+            workerJobToken,
+            apiKind,
+            mode,
+          )
+        : await optimizePaginatedOffMain(
+            pageWindow,
+            originalBody,
+            apiKind,
+            mode,
+          );
       stats = result.stats;
+      cacheable = result.cacheable;
       optimizedPayload = result.payload;
-      if (result.stats.changed) {
-        optimized = true;
-      }
-
-      const messages = Array.isArray(result.payload.messages)
-        ? result.payload.messages
-        : [];
-      const chunksNewestFirst = splitPaginatedMessagesNewestFirst(messages, {
-        maxTurns: MODE_OPTIONS[mode].paginatedRenderTurns,
-        // Turn atomicity is the only historical chunk boundary. Large AI answers
-        // remain attached to their user question instead of being message-sliced.
-        maxMessages: Number.MAX_SAFE_INTEGER,
-        maxBytes: Number.MAX_SAFE_INTEGER,
-        // Every manual history click represents one semantic conversation turn.
-        // Never split a user question away from its corresponding AI reply.
-        allowSplitTurns: false,
-      });
+      registerStaticCodeBlocks(pageWindow, result.codeBlocks);
+      if (result.stats.changed || workerJobToken) optimized = true;
+      const chunksNewestFirst = result.chunks;
 
       if (chunksNewestFirst.length > 1) {
         const originalPageInfo =
@@ -1251,6 +2150,109 @@ function requestSignal(
     : undefined;
 }
 
+async function prepareCompletePaginatedResponse(
+  pageWindow: Window & typeof globalThis,
+  originalFetch: typeof pageWindow.fetch,
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  rewrittenUrl: string,
+  apiKind: "paginated-initial" | "paginated-messages",
+  conversationId: string,
+): Promise<PreparedPaginatedResponse> {
+  const [firstInput, firstInit] = rewriteGetRequest(
+    pageWindow,
+    input,
+    init,
+    rewrittenUrl,
+  );
+  const firstResponse = await originalFetch(firstInput, firstInit);
+  if (!firstResponse.ok || !ensureJsonWorker(pageWindow)) {
+    return {
+      response:
+        apiKind === "paginated-messages"
+          ? await fetchCompleteHistoryPage(
+              pageWindow,
+              originalFetch,
+              input,
+              init,
+              rewrittenUrl,
+            )
+          : await fetchCompleteInitialPage(
+              pageWindow,
+              originalFetch,
+              input,
+              init,
+              rewrittenUrl,
+              conversationId,
+            ),
+    };
+  }
+
+  let probe: PaginatedJobProbe | undefined;
+  try {
+    probe = await startPaginatedWorkerJob(
+      pageWindow,
+      await firstResponse.clone().arrayBuffer(),
+      apiKind === "paginated-messages",
+    );
+    const seenCursors = new Set<string>();
+    for (let attempt = 0; !probe.complete && attempt < 9; attempt += 1) {
+      const cursor = probe.cursor;
+      if (!cursor || seenCursors.has(cursor)) break;
+      seenCursors.add(cursor);
+      const olderUrl =
+        apiKind === "paginated-initial"
+          ? new pageWindow.URL(
+              `/backend-api/conversations/${conversationId}/messages`,
+              rewrittenUrl,
+            )
+          : new pageWindow.URL(rewrittenUrl);
+      olderUrl.searchParams.set("before", cursor);
+      olderUrl.searchParams.set("include_has_versions", "true");
+      olderUrl.searchParams.set(
+        "num_turns",
+        String(Math.min(512, 2 ** Math.min(9, attempt + 2))),
+      );
+      const [olderInput, olderInit] = rewriteGetRequest(
+        pageWindow,
+        input,
+        init,
+        olderUrl.href,
+      );
+      const olderResponse = await originalFetch(olderInput, olderInit);
+      if (!olderResponse.ok) break;
+      probe = await prependPaginatedWorkerJob(
+        pageWindow,
+        probe.token,
+        await olderResponse.arrayBuffer(),
+      );
+    }
+    return { response: firstResponse, workerJobToken: probe.token };
+  } catch (error) {
+    if (probe?.token) await cancelPaginatedWorkerJob(pageWindow, probe.token);
+    console.warn(`[${SCRIPT_NAME}] Worker page assembly fell back`, error);
+    return {
+      response:
+        apiKind === "paginated-messages"
+          ? await fetchCompleteHistoryPage(
+              pageWindow,
+              originalFetch,
+              input,
+              init,
+              rewrittenUrl,
+            )
+          : await fetchCompleteInitialPage(
+              pageWindow,
+              originalFetch,
+              input,
+              init,
+              rewrittenUrl,
+              conversationId,
+            ),
+    };
+  }
+}
+
 async function fetchCompleteInitialPage(
   pageWindow: Window & typeof globalThis,
   originalFetch: typeof pageWindow.fetch,
@@ -1268,7 +2270,10 @@ async function fetchCompleteInitialPage(
   const firstResponse = await originalFetch(firstInput, firstInit);
   if (!firstResponse.ok) return firstResponse;
 
-  let payload = (await firstResponse.clone().json()) as PaginatedConversationPayload;
+  let payload = await responseJsonOffMain<PaginatedConversationPayload>(
+    pageWindow,
+    firstResponse.clone(),
+  );
   const seenCursors = new Set<string>();
   let combined = false;
 
@@ -1301,7 +2306,10 @@ async function fetchCompleteInitialPage(
     );
     const olderResponse = await originalFetch(olderInput, olderInit);
     if (!olderResponse.ok) break;
-    const olderPayload = (await olderResponse.json()) as PaginatedConversationPayload;
+    const olderPayload = await responseJsonOffMain<PaginatedConversationPayload>(
+      pageWindow,
+      olderResponse,
+    );
     payload = {
       ...payload,
       messages: mergeChronologicalMessages(
@@ -1345,7 +2353,10 @@ async function fetchCompleteHistoryPage(
   const firstResponse = await originalFetch(firstInput, firstInit);
   if (!firstResponse.ok) return firstResponse;
 
-  let payload = (await firstResponse.clone().json()) as PaginatedConversationPayload;
+  let payload = await responseJsonOffMain<PaginatedConversationPayload>(
+    pageWindow,
+    firstResponse.clone(),
+  );
   const seenCursors = new Set<string>();
   let combined = false;
 
@@ -1374,7 +2385,10 @@ async function fetchCompleteHistoryPage(
     );
     const olderResponse = await originalFetch(olderInput, olderInit);
     if (!olderResponse.ok) break;
-    const olderPayload = (await olderResponse.json()) as PaginatedConversationPayload;
+    const olderPayload = await responseJsonOffMain<PaginatedConversationPayload>(
+      pageWindow,
+      olderResponse,
+    );
     payload = {
       ...payload,
       messages: mergeChronologicalMessages(
@@ -1421,103 +2435,35 @@ async function materializeLegacyRequestLazily(
     "num_turns",
     String(MODE_OPTIONS[mode].lazyInitialTurns),
   );
-  const [lazyInput, lazyInit] = rewriteGetRequest(
-    pageWindow,
-    input,
-    init,
-    lazyUrl.href,
-  );
-
   try {
-    const nativeResponse = await originalFetch(lazyInput, {
-      ...lazyInit,
-      cache: "no-store",
-    });
+    const prepared = await prepareCompletePaginatedResponse(
+      pageWindow,
+      originalFetch,
+      input,
+      { ...init, cache: "no-store" },
+      lazyUrl.href,
+      "paginated-initial",
+      conversationId,
+    );
+    const nativeResponse = prepared.response;
     if (!nativeResponse.ok) {
       throw new Error(`Native pagination returned HTTP ${nativeResponse.status}`);
     }
 
-    let nativePayload = (await nativeResponse.clone().json()) as PaginatedConversationPayload;
-    let fetchedOlderPage = false;
-    const seenCursors = new Set<string>();
-    for (let attempt = 0; attempt < 9; attempt += 1) {
-      const collected = Array.isArray(nativePayload.messages) ? nativePayload.messages : [];
-      if (hasRenderableQuestionAnswerTurn(collected, false)) break;
-
-      const cursor =
-        nativePayload.page_info?.has_previous_page === true &&
-        typeof nativePayload.page_info.start_cursor === "string"
-          ? nativePayload.page_info.start_cursor
-          : null;
-      if (!cursor) break;
-      if (seenCursors.has(cursor)) {
-        throw new Error("Native pagination cursor did not advance");
-      }
-      seenCursors.add(cursor);
-
-      const olderUrl = new pageWindow.URL(
-        `/backend-api/conversations/${conversationId}/messages`,
-        legacyUrl,
-      );
-      olderUrl.searchParams.set("before", cursor);
-      olderUrl.searchParams.set("include_has_versions", "true");
-      // If the backend interprets num_turns as a low-level message window rather
-      // than a semantic user turn, grow only as needed to recover the current
-      // question boundary. Normal backends stop on the first 2-unit request.
-      olderUrl.searchParams.set(
-        "num_turns",
-        String(Math.min(512, 2 ** Math.min(9, attempt + 2))),
-      );
-      const [olderInput, olderInit] = rewriteGetRequest(
-        pageWindow,
-        input,
-        init,
-        olderUrl.href,
-      );
-      const olderResponse = await originalFetch(olderInput, {
-        ...olderInit,
-        cache: "no-store",
-      });
-      if (!olderResponse.ok) {
-        throw new Error(`Native history pagination returned HTTP ${olderResponse.status}`);
-      }
-      const olderPayload = (await olderResponse.json()) as PaginatedConversationPayload;
-      nativePayload = {
-        ...nativePayload,
-        messages: mergeChronologicalMessages(
-          Array.isArray(olderPayload.messages) ? olderPayload.messages : [],
-          collected,
-        ),
-        page_info: olderPayload.page_info,
-        safe_urls: olderPayload.safe_urls ?? nativePayload.safe_urls ?? [],
-        blocked_urls: olderPayload.blocked_urls ?? nativePayload.blocked_urls ?? [],
-      };
-      fetchedOlderPage = true;
-    }
-    if (!Array.isArray(nativePayload.messages) || nativePayload.messages.length === 0) {
-      throw new Error("Native pagination returned no messages");
-    }
-
-    const preparedNativeResponse = fetchedOlderPage
-      ? new pageWindow.Response(JSON.stringify(nativePayload), {
-          status: nativeResponse.status,
-          statusText: nativeResponse.statusText,
-          headers: nativeResponse.headers,
-        })
-      : nativeResponse;
-
     const nativeMaterialized = await materializeAndOptimizePaginated(
       pageWindow,
-      preparedNativeResponse,
+      nativeResponse,
       "paginated-initial",
       mode,
       legacyUrl,
       true,
       createLocalCursor,
+      prepared.workerJobToken,
     );
-    const optimizedNativePayload = JSON.parse(
+    const optimizedNativePayload = await parseJsonOffMain<PaginatedConversationPayload>(
+      pageWindow,
       nativeMaterialized.body,
-    ) as PaginatedConversationPayload;
+    );
     const lazyPayload = convertNativeInitialToLazyConversation(
       optimizedNativePayload,
       conversationId,
@@ -1610,6 +2556,7 @@ function install(pageWindow: Window & typeof globalThis): void {
     installRichTextPerformanceFix(
       pageWindow,
       MODE_OPTIONS[settings.mode].richTextWarmDistancePx,
+      MODE_OPTIONS[settings.mode].codeEditorWarmDistancePx,
     );
   }
 
@@ -1624,6 +2571,7 @@ function install(pageWindow: Window & typeof globalThis): void {
   }
 
   const activeMode = settings.mode as Exclude<Mode, "off">;
+  const responseFallback = installLegacyResponseFallback(pageWindow, activeMode);
   installManualPaginationObserver(pageWindow);
 
   const originalFetch = pageWindow.fetch.bind(pageWindow);
@@ -1645,6 +2593,7 @@ function install(pageWindow: Window & typeof globalThis): void {
     cache.clear();
     inFlight.clear();
     localPages.clear();
+    responseFallback.clear();
   };
 
   const wrappedFetch: typeof pageWindow.fetch = async (input, init) => {
@@ -1654,7 +2603,7 @@ function install(pageWindow: Window & typeof globalThis): void {
 
     if (isConversationMutation(rawUrl, method, pageWindow.location.href)) {
       clearConversationCache();
-      return originalFetch(input, init);
+      return originalFetch(input, restoreStaticCodeRequestInit(init));
     }
 
     if (method !== "GET" || !apiMatch) {
@@ -1744,34 +2693,38 @@ function install(pageWindow: Window & typeof globalThis): void {
         rewrittenUrl,
       );
       key = `paginated:${rewrittenUrl}`;
+      if (apiMatch.kind === "paginated-messages") {
+        const cached = cache.get(key);
+        if (cached && cached.expiresAt > Date.now()) {
+          const root = pageWindow.document.documentElement;
+          const hits = Number(root.dataset.chatgptHistoryCacheHits ?? "0");
+          root.dataset.chatgptHistoryCacheHits = String(hits + 1);
+          await yieldUntilInteractionIdle(pageWindow);
+          return cloneMaterializedResponse(pageWindow, cached.response);
+        }
+        if (cached) cache.delete(key);
+      }
       task = inFlight.get(key);
       if (!task) {
-        const responseTask =
-          apiMatch.kind === "paginated-messages"
-            ? fetchCompleteHistoryPage(
-                pageWindow,
-                originalFetch,
-                input,
-                init,
-                rewrittenUrl,
-              )
-            : fetchCompleteInitialPage(
-                pageWindow,
-                originalFetch,
-                input,
-                init,
-                rewrittenUrl,
-                apiMatch.conversationId,
-              );
-        task = responseTask.then((response) =>
+        const responseTask = prepareCompletePaginatedResponse(
+          pageWindow,
+          originalFetch,
+          input,
+          init,
+          rewrittenUrl,
+          apiMatch.kind,
+          apiMatch.conversationId,
+        );
+        task = responseTask.then((prepared) =>
           materializeAndOptimizePaginated(
             pageWindow,
-            response,
+            prepared.response,
             apiMatch.kind,
             activeMode,
             normalizedRawUrl,
             requestWasClamped,
             createLocalCursor,
+            prepared.workerJobToken,
           ),
         );
         inFlight.set(key, task);
@@ -1787,6 +2740,16 @@ function install(pageWindow: Window & typeof globalThis): void {
         const oldest = localPages.keys().next().value;
         if (typeof oldest !== "string") break;
         localPages.delete(oldest);
+      }
+
+      if (
+        materialized.apiKind === "paginated-messages" &&
+        materialized.optimized
+      ) {
+        cache.set(key, {
+          expiresAt: Date.now() + HISTORY_CACHE_TTL_MS,
+          response: materialized,
+        });
       }
 
       if (

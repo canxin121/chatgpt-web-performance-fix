@@ -204,6 +204,95 @@ describe("optimizer safety guards", () => {
   });
 });
 
+describe("legacy emergency optimizer", () => {
+  test("keeps only user and current dependency nodes when a live turn has no visible AI text", () => {
+    const payload: ConversationPayload = {
+      current_node: "tool-result",
+      mapping: {
+        root: { id: "root", parent: null, children: ["user"] },
+        user: {
+          id: "user",
+          parent: "root",
+          children: ["thought"],
+          message: {
+            id: "user",
+            author: { role: "user" },
+            content: { content_type: "text", parts: ["question"] },
+          },
+        },
+        thought: {
+          id: "thought",
+          parent: "user",
+          children: ["old-tool-call"],
+          message: {
+            id: "thought",
+            author: { role: "assistant" },
+            content: { content_type: "thoughts", parts: ["internal"] },
+          },
+        },
+        "old-tool-call": {
+          id: "old-tool-call",
+          parent: "thought",
+          children: ["old-tool-result"],
+          message: {
+            id: "old-tool-call",
+            author: { role: "assistant" },
+            recipient: "tool.old",
+            content: { content_type: "code", parts: ["old call"] },
+          },
+        },
+        "old-tool-result": {
+          id: "old-tool-result",
+          parent: "old-tool-call",
+          children: ["tool-call"],
+          message: {
+            id: "old-tool-result",
+            author: { role: "tool" },
+            content: { content_type: "code", parts: ["old result"] },
+          },
+        },
+        "tool-call": {
+          id: "tool-call",
+          parent: "old-tool-result",
+          children: ["tool-result"],
+          message: {
+            id: "tool-call",
+            author: { role: "assistant" },
+            recipient: "tool.current",
+            content: { content_type: "code", parts: ["current call"] },
+          },
+        },
+        "tool-result": {
+          id: "tool-result",
+          parent: "tool-call",
+          children: [],
+          message: {
+            id: "tool-result",
+            author: { role: "tool" },
+            content: { content_type: "code", parts: ["current result"] },
+          },
+        },
+      },
+    };
+
+    const result = optimizeConversationPayload(payload, {
+      minNodeCount: 0,
+      recentFullTurns: 0,
+      preserveCurrentParent: true,
+      collapseTurnsToQuestionAnswer: true,
+    });
+
+    expect(Object.keys(result.payload.mapping ?? {})).toEqual([
+      "user",
+      "tool-call",
+      "tool-result",
+    ]);
+    expect(result.payload.current_node).toBe("tool-result");
+    expect(result.payload.mapping?.["tool-call"]?.parent).toBe("user");
+    expect(result.payload.mapping?.["tool-result"]?.parent).toBe("tool-call");
+  });
+});
+
 describe("native paginated conversation optimizer", () => {
   capturedTest("reduces a real 773-message historical turn to 8 visible messages", async () => {
     const { payload } = await loadCapturedConversation();

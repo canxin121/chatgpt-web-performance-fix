@@ -1,0 +1,1899 @@
+{
+  "traceDurationMs": 487315784.925,
+  "eventCount": 2116482,
+  "rendererMainThread": "CrRendererMain",
+  "mainThreadCompleteEventCount": 544938,
+  "taskCount": 52810,
+  "longTaskCount": 157,
+  "taskDurationMs": {
+    "p50": 0.003,
+    "p95": 1.104,
+    "p99": 5.043,
+    "max": 24853.295
+  },
+  "longTaskDurationMs": {
+    "total": 53509.415,
+    "max": 24853.295
+  },
+  "layoutPaintInclusiveMs": 47515.267,
+  "gcInclusiveMs": 15299.899,
+  "topMainThreadEvents": [
+    {
+      "name": "RunTask",
+      "count": 52810,
+      "inclusiveMs": 64268.395,
+      "maxMs": 24853.295
+    },
+    {
+      "name": "v8.callFunction",
+      "count": 86377,
+      "inclusiveMs": 58408.447,
+      "maxMs": 22200.721
+    },
+    {
+      "name": "FunctionCall",
+      "count": 82272,
+      "inclusiveMs": 51643.848,
+      "maxMs": 22200.713
+    },
+    {
+      "name": "RunMicrotasks",
+      "count": 7761,
+      "inclusiveMs": 39872.316,
+      "maxMs": 24853.235
+    },
+    {
+      "name": "UpdateLayoutTree",
+      "count": 9516,
+      "inclusiveMs": 39481.728,
+      "maxMs": 116.002
+    },
+    {
+      "name": "v8::Debugger::AsyncTaskRun",
+      "count": 11844,
+      "inclusiveMs": 15461.335,
+      "maxMs": 159.531
+    },
+    {
+      "name": "Layout",
+      "count": 1578,
+      "inclusiveMs": 5755.22,
+      "maxMs": 102.411
+    },
+    {
+      "name": "LocalFrameView::performLayout",
+      "count": 1578,
+      "inclusiveMs": 5577.306,
+      "maxMs": 102.226
+    },
+    {
+      "name": "EventDispatch",
+      "count": 11766,
+      "inclusiveMs": 3651.948,
+      "maxMs": 369.924
+    },
+    {
+      "name": "WidgetBaseInputHandler::OnHandleInputEvent",
+      "count": 2438,
+      "inclusiveMs": 3387.866,
+      "maxMs": 374.781
+    },
+    {
+      "name": "WebFrameWidgetImpl::HandleInputEvent",
+      "count": 2438,
+      "inclusiveMs": 3373.023,
+      "maxMs": 374.765
+    },
+    {
+      "name": "TimerFire",
+      "count": 7112,
+      "inclusiveMs": 2813.397,
+      "maxMs": 82.258
+    },
+    {
+      "name": "PageAnimator::serviceScriptedAnimations",
+      "count": 3105,
+      "inclusiveMs": 2352.84,
+      "maxMs": 290.596
+    },
+    {
+      "name": "MinorGC",
+      "count": 676,
+      "inclusiveMs": 2043.231,
+      "maxMs": 8.746
+    },
+    {
+      "name": "V8.GCScavenger",
+      "count": 676,
+      "inclusiveMs": 2031.741,
+      "maxMs": 8.724
+    },
+    {
+      "name": "V8.GC_SCAVENGER",
+      "count": 676,
+      "inclusiveMs": 2025.511,
+      "maxMs": 8.707
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE",
+      "count": 676,
+      "inclusiveMs": 2021.783,
+      "maxMs": 8.699
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_PARALLEL_PHASE",
+      "count": 676,
+      "inclusiveMs": 1764.957,
+      "maxMs": 7.979
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_PARALLEL",
+      "count": 10291,
+      "inclusiveMs": 1314.468,
+      "maxMs": 7.921
+    },
+    {
+      "name": "FireAnimationFrame",
+      "count": 1749,
+      "inclusiveMs": 1107.595,
+      "maxMs": 159.533
+    },
+    {
+      "name": "V8.HandleInterrupts",
+      "count": 4848,
+      "inclusiveMs": 1004.375,
+      "maxMs": 382.031
+    },
+    {
+      "name": "V8.StackGuard",
+      "count": 4712,
+      "inclusiveMs": 998.804,
+      "maxMs": 382.034
+    },
+    {
+      "name": "Paint",
+      "count": 39917,
+      "inclusiveMs": 766.398,
+      "maxMs": 2.796
+    },
+    {
+      "name": "EvaluateScript",
+      "count": 31,
+      "inclusiveMs": 647.451,
+      "maxMs": 386.235
+    },
+    {
+      "name": "MajorGC",
+      "count": 23,
+      "inclusiveMs": 534.174,
+      "maxMs": 37.236
+    },
+    {
+      "name": "V8.GCFinalizeMC",
+      "count": 23,
+      "inclusiveMs": 533.869,
+      "maxMs": 37.224
+    },
+    {
+      "name": "V8.GC_MARK_COMPACTOR",
+      "count": 23,
+      "inclusiveMs": 533.756,
+      "maxMs": 37.219
+    },
+    {
+      "name": "Commit",
+      "count": 3099,
+      "inclusiveMs": 526.325,
+      "maxMs": 5.559
+    },
+    {
+      "name": "PrePaint",
+      "count": 6213,
+      "inclusiveMs": 506.529,
+      "maxMs": 4.511
+    },
+    {
+      "name": "CppGC.IncrementalSweep",
+      "count": 30579,
+      "inclusiveMs": 503.595,
+      "maxMs": 14.786
+    },
+    {
+      "name": "HitTest",
+      "count": 2770,
+      "inclusiveMs": 458.849,
+      "maxMs": 2.833
+    },
+    {
+      "name": "V8.InvokeApiInterruptCallbacks",
+      "count": 2,
+      "inclusiveMs": 382.03,
+      "maxMs": 382.029
+    },
+    {
+      "name": "CpuProfiler::StartProfiling",
+      "count": 1,
+      "inclusiveMs": 381.964,
+      "maxMs": 381.964
+    },
+    {
+      "name": "IntersectionObserverController::computeIntersections",
+      "count": 6401,
+      "inclusiveMs": 315.11,
+      "maxMs": 0.829
+    },
+    {
+      "name": "Layerize",
+      "count": 2805,
+      "inclusiveMs": 293.376,
+      "maxMs": 2.081
+    },
+    {
+      "name": "V8.GCIncrementalMarking",
+      "count": 6801,
+      "inclusiveMs": 284.877,
+      "maxMs": 5.021
+    },
+    {
+      "name": "V8.GC_MC_INCREMENTAL",
+      "count": 6801,
+      "inclusiveMs": 281.522,
+      "maxMs": 5.019
+    },
+    {
+      "name": "V8.GC_MC_MARK",
+      "count": 23,
+      "inclusiveMs": 245.427,
+      "maxMs": 22.92
+    },
+    {
+      "name": "V8.GC_MC_MARK_FULL_CLOSURE_SERIAL",
+      "count": 23,
+      "inclusiveMs": 172.358,
+      "maxMs": 13.166
+    },
+    {
+      "name": "V8.GC_MC_MARK_WEAK_CLOSURE_EPHEMERON_LINEAR",
+      "count": 23,
+      "inclusiveMs": 164.382,
+      "maxMs": 12.608
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_COLLECT_OLD_TO_NEW_PAGES",
+      "count": 676,
+      "inclusiveMs": 147.833,
+      "maxMs": 0.432
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_ROOTS",
+      "count": 676,
+      "inclusiveMs": 147.254,
+      "maxMs": 4.747
+    },
+    {
+      "name": "V8.GC_MC_EVACUATE",
+      "count": 46,
+      "inclusiveMs": 144.956,
+      "maxMs": 12.109
+    },
+    {
+      "name": "v8.compile",
+      "count": 29,
+      "inclusiveMs": 129.454,
+      "maxMs": 48.08
+    },
+    {
+      "name": "CppGC.SweepInLowPriorityTask",
+      "count": 21,
+      "inclusiveMs": 116.915,
+      "maxMs": 13.009
+    },
+    {
+      "name": "ScriptCompiled",
+      "count": 29,
+      "inclusiveMs": 106.948,
+      "maxMs": 33.587
+    },
+    {
+      "name": "v8.run",
+      "count": 29,
+      "inclusiveMs": 106.81,
+      "maxMs": 33.573
+    },
+    {
+      "name": "V8.GC_MC_EVACUATE_UPDATE_POINTERS",
+      "count": 23,
+      "inclusiveMs": 100.669,
+      "maxMs": 6.454
+    },
+    {
+      "name": "v8.evaluateModule",
+      "count": 331,
+      "inclusiveMs": 94.378,
+      "maxMs": 58.105
+    },
+    {
+      "name": "CppGC.SweepInTask",
+      "count": 18,
+      "inclusiveMs": 79.003,
+      "maxMs": 5.083
+    }
+  ],
+  "worstLongTasks": [
+    {
+      "startMs": 487232311.226,
+      "durationMs": 24853.295,
+      "layoutPaintInclusiveMs": 21110.244,
+      "scriptInclusiveMs": 47132.196,
+      "gcInclusiveMs": 588.483,
+      "inputs": [
+        "blur",
+        "focusout",
+        "DOMFocusOut",
+        "focus",
+        "focusin",
+        "DOMFocusIn"
+      ],
+      "topEvents": [
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 24853.235
+        },
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 22277.96
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 22277.221
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 20747.218
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 363.026
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 294.47
+        },
+        {
+          "name": "CppGC.IncrementalSweep",
+          "inclusiveMs": 83.152
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 74.966
+        },
+        {
+          "name": "V8.HandleInterrupts",
+          "inclusiveMs": 69.275
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 68.356
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 22200.83
+        },
+        {
+          "source": "8b34dbc2-h9xyg2koz689ttr1.js",
+          "inclusiveMs": 60.803
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 13.625
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 1.832
+        },
+        {
+          "source": "https://chatgpt.com/c/:id",
+          "inclusiveMs": 0.384
+        }
+      ]
+    },
+    {
+      "startMs": 487279612.78,
+      "durationMs": 6395.86,
+      "layoutPaintInclusiveMs": 5996.051,
+      "scriptInclusiveMs": 6497.605,
+      "gcInclusiveMs": 38.115,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 6497.506
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 6393.994
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 5944.089
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 103.442
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 101.583
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 51.962
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 32.536
+        },
+        {
+          "name": "CppGC.IncrementalSweep",
+          "inclusiveMs": 28.01
+        },
+        {
+          "name": "MinorGC",
+          "inclusiveMs": 7.483
+        },
+        {
+          "name": "V8.GCScavenger",
+          "inclusiveMs": 7.357
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 6292.432
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 98.507
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.179
+        },
+        {
+          "source": "https://chatgpt.com/g/:id/c/:id",
+          "inclusiveMs": 0.169
+        }
+      ]
+    },
+    {
+      "startMs": 487275839.11,
+      "durationMs": 2829.259,
+      "layoutPaintInclusiveMs": 77.518,
+      "scriptInclusiveMs": 3137.325,
+      "gcInclusiveMs": 153.413,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 2829.209
+        },
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 308.136
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 308.116
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 79.088
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 76.836
+        },
+        {
+          "name": "MinorGC",
+          "inclusiveMs": 31.064
+        },
+        {
+          "name": "V8.GCScavenger",
+          "inclusiveMs": 29.797
+        },
+        {
+          "name": "V8.GC_SCAVENGER",
+          "inclusiveMs": 29.186
+        },
+        {
+          "name": "V8.GC_SCAVENGER_SCAVENGE",
+          "inclusiveMs": 28.818
+        },
+        {
+          "name": "V8.GC_SCAVENGER_SCAVENGE_PARALLEL_PHASE",
+          "inclusiveMs": 15.536
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 229.116
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 78.809
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.105
+        }
+      ]
+    },
+    {
+      "startMs": 487257165.044,
+      "durationMs": 699.65,
+      "layoutPaintInclusiveMs": 424.997,
+      "scriptInclusiveMs": 1746.419,
+      "gcInclusiveMs": 11.143,
+      "inputs": [
+        "pointerout",
+        "pointerover",
+        "mouseout",
+        "mouseover",
+        "mouseenter",
+        "pointermove",
+        "mousemove",
+        "pointerdown"
+      ],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 1278.077
+        },
+        {
+          "name": "WidgetBaseInputHandler::OnHandleInputEvent",
+          "inclusiveMs": 698.683
+        },
+        {
+          "name": "WebFrameWidgetImpl::HandleInputEvent",
+          "inclusiveMs": 696.996
+        },
+        {
+          "name": "EventDispatch",
+          "inclusiveMs": 691.28
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 555.442
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 499.697
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 394.286
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 156.606
+        },
+        {
+          "name": "PrePaint",
+          "inclusiveMs": 12.961
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 8.886
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 350.168
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 143.956
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 4.083
+        },
+        {
+          "source": "0631b696-glw2xi0e51thcgtf.js",
+          "inclusiveMs": 1.152
+        },
+        {
+          "source": "conversation-small-k3kcucfbrrlc8z48.js",
+          "inclusiveMs": 0.338
+        }
+      ]
+    },
+    {
+      "startMs": 487270329.957,
+      "durationMs": 673.128,
+      "layoutPaintInclusiveMs": 662.457,
+      "scriptInclusiveMs": 1011.817,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 1011.933
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 672.758
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 339.059
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 338.981
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 332.428
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 331.243
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 330.029
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskScheduled",
+          "inclusiveMs": 0.043
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskCanceled",
+          "inclusiveMs": 0.023
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.012
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 337.864
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 333.92
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.658
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.067
+        }
+      ]
+    },
+    {
+      "startMs": 487278891.376,
+      "durationMs": 624.924,
+      "layoutPaintInclusiveMs": 616.555,
+      "scriptInclusiveMs": 938.135,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 938.228
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 624.643
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 313.492
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 313.431
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 310.186
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 308.897
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 306.369
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskScheduled",
+          "inclusiveMs": 0.038
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.032
+        },
+        {
+          "name": "V8.HandleInterrupts",
+          "inclusiveMs": 0.031
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 312.826
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 311.311
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.282
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.043
+        }
+      ]
+    },
+    {
+      "startMs": 487274257.977,
+      "durationMs": 620.328,
+      "layoutPaintInclusiveMs": 611.951,
+      "scriptInclusiveMs": 931.905,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 931.996
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 620.033
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 311.872
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 311.81
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 307.575
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 306.427
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 304.376
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskScheduled",
+          "inclusiveMs": 0.042
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskCanceled",
+          "inclusiveMs": 0.029
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.013
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 310.946
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 308.323
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.523
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.05
+        }
+      ]
+    },
+    {
+      "startMs": 487274914.176,
+      "durationMs": 620.24,
+      "layoutPaintInclusiveMs": 611.378,
+      "scriptInclusiveMs": 933.012,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 933.11
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 619.949
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 313.063
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 313.004
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 308.201
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 306.903
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 303.177
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.077
+        },
+        {
+          "name": "V8.HandleInterrupts",
+          "inclusiveMs": 0.075
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskScheduled",
+          "inclusiveMs": 0.037
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 312.153
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 307.049
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.497
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.047
+        }
+      ]
+    },
+    {
+      "startMs": 487218880.961,
+      "durationMs": 604.499,
+      "layoutPaintInclusiveMs": 578.243,
+      "scriptInclusiveMs": 605.185,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 605.251
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 602.245
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 564.711
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 13.532
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 7.953
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 2.94
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 0.832
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.808
+        },
+        {
+          "name": "V8.HandleInterrupts",
+          "inclusiveMs": 0.788
+        },
+        {
+          "name": "V8.BytecodeBudgetInterrupt",
+          "inclusiveMs": 0.258
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 601.502
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 0.522
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.221
+        }
+      ]
+    },
+    {
+      "startMs": 487263763.018,
+      "durationMs": 515.552,
+      "layoutPaintInclusiveMs": 65.938,
+      "scriptInclusiveMs": 582.886,
+      "gcInclusiveMs": 66.291,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 582.934
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 514.955
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 67.931
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 67.376
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 65.558
+        },
+        {
+          "name": "MinorGC",
+          "inclusiveMs": 12.391
+        },
+        {
+          "name": "V8.GCScavenger",
+          "inclusiveMs": 12.118
+        },
+        {
+          "name": "V8.GC_SCAVENGER",
+          "inclusiveMs": 11.827
+        },
+        {
+          "name": "V8.GC_SCAVENGER_SCAVENGE",
+          "inclusiveMs": 11.735
+        },
+        {
+          "name": "V8.GC_SCAVENGER_SCAVENGE_PARALLEL_PHASE",
+          "inclusiveMs": 7.748
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 447.593
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 67.211
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.079
+        }
+      ]
+    },
+    {
+      "startMs": 487273761.756,
+      "durationMs": 454.025,
+      "layoutPaintInclusiveMs": 447.762,
+      "scriptInclusiveMs": 681.746,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 681.815
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 453.799
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 227.947
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 227.902
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 224.524
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 223.739
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 223.238
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskScheduled",
+          "inclusiveMs": 0.027
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskCanceled",
+          "inclusiveMs": 0.022
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.022
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 227.265
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 225.972
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.375
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.038
+        }
+      ]
+    },
+    {
+      "startMs": 487271044.586,
+      "durationMs": 406.886,
+      "layoutPaintInclusiveMs": 400.214,
+      "scriptInclusiveMs": 611.911,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 611.982
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 406.647
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 205.264
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 205.217
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 201.52
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 200.845
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 198.694
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.133
+        },
+        {
+          "name": "V8.HandleInterrupts",
+          "inclusiveMs": 0.132
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskScheduled",
+          "inclusiveMs": 0.029
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 204.571
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 201.506
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.387
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.034
+        }
+      ]
+    },
+    {
+      "startMs": 487214688.177,
+      "durationMs": 386.28,
+      "layoutPaintInclusiveMs": 0.0,
+      "scriptInclusiveMs": 386.403,
+      "gcInclusiveMs": 0.048,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "EvaluateScript",
+          "inclusiveMs": 386.235
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 382.034
+        },
+        {
+          "name": "V8.HandleInterrupts",
+          "inclusiveMs": 382.031
+        },
+        {
+          "name": "V8.InvokeApiInterruptCallbacks",
+          "inclusiveMs": 382.029
+        },
+        {
+          "name": "CpuProfiler::StartProfiling",
+          "inclusiveMs": 381.964
+        },
+        {
+          "name": "V8.DeoptimizeAllOptimizedCodeWithFunction",
+          "inclusiveMs": 3.977
+        },
+        {
+          "name": "LargeScriptCatchup",
+          "inclusiveMs": 3.375
+        },
+        {
+          "name": "StubScriptCatchup",
+          "inclusiveMs": 1.489
+        },
+        {
+          "name": "ScriptCatchup",
+          "inclusiveMs": 1.407
+        },
+        {
+          "name": "V8.GC_HEAP_ENSURE_SWEEPING_COMPLETED",
+          "inclusiveMs": 0.037
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 0.058
+        },
+        {
+          "source": "70025534-m8tlqo1dyi0mkzus.js",
+          "inclusiveMs": 0.008
+        },
+        {
+          "source": "LoadTimes",
+          "inclusiveMs": 0.001
+        },
+        {
+          "source": "f025431a-ehagpvg3m4e1cduv.js",
+          "inclusiveMs": 0.001
+        },
+        {
+          "source": "d42ee766-knyektvjvbyqei97.js",
+          "inclusiveMs": 0.001
+        },
+        {
+          "source": "root-eqtpggp6.js",
+          "inclusiveMs": 0.001
+        },
+        {
+          "source": "_conversation-h4bisxjc.js",
+          "inclusiveMs": 0.001
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.001
+        }
+      ]
+    },
+    {
+      "startMs": 487286762.358,
+      "durationMs": 384.726,
+      "layoutPaintInclusiveMs": 378.383,
+      "scriptInclusiveMs": 584.101,
+      "gcInclusiveMs": 10.449,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 584.172
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 384.478
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 199.623
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 199.584
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 195.053
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 194.34
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 183.33
+        },
+        {
+          "name": "V8.GCIncrementalMarkingStart",
+          "inclusiveMs": 4.635
+        },
+        {
+          "name": "CppGC.IncrementalSweep",
+          "inclusiveMs": 4.13
+        },
+        {
+          "name": "V8.GC_HEAP_ENSURE_SWEEPING_COMPLETED",
+          "inclusiveMs": 3.606
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 198.611
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 184.976
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.694
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.038
+        }
+      ]
+    },
+    {
+      "startMs": 487291201.266,
+      "durationMs": 374.852,
+      "layoutPaintInclusiveMs": 202.549,
+      "scriptInclusiveMs": 1105.31,
+      "gcInclusiveMs": 35.036,
+      "inputs": [
+        "pointerup",
+        "mouseup",
+        "click",
+        "DOMActivate"
+      ],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 735.221
+        },
+        {
+          "name": "WidgetBaseInputHandler::OnHandleInputEvent",
+          "inclusiveMs": 374.781
+        },
+        {
+          "name": "WebFrameWidgetImpl::HandleInputEvent",
+          "inclusiveMs": 374.765
+        },
+        {
+          "name": "EventDispatch",
+          "inclusiveMs": 370.192
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 368.045
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 367.073
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 109.097
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 88.938
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 88.624
+        },
+        {
+          "name": "MinorGC",
+          "inclusiveMs": 6.851
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 364.302
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 3.521
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.128
+        },
+        {
+          "source": "0631b696-glw2xi0e51thcgtf.js",
+          "inclusiveMs": 0.027
+        }
+      ]
+    }
+  ],
+  "inputEventCounts": {
+    "pagereveal": 3,
+    "resize": 6,
+    "load": 3169,
+    "readystatechange": 103,
+    "DOMContentLoaded": 22,
+    "contentvisibilityautostatechange": 227,
+    "mouseover": 527,
+    "mouseenter": 94,
+    "mousemove": 2147,
+    "modkelfkcfjpgbfmnbnllalkiogfofhb:host:wxt:content-script-started": 1,
+    "modkelfkcfjpgbfmnbnllalkiogfofhb:selection:wxt:content-script-started": 1,
+    "modkelfkcfjpgbfmnbnllalkiogfofhb:side:wxt:content-script-started": 1,
+    "pointermove": 2143,
+    "pageshow": 26,
+    "beforeunload": 4,
+    "pagehide": 7,
+    "visibilitychange": 7,
+    "webkitvisibilitychange": 7,
+    "unload": 7,
+    "animationiteration": 168,
+    "prompt-textarea-rich-text-ready": 3,
+    "transitionrun": 66,
+    "animationstart": 158,
+    "transitionstart": 64,
+    "transitionend": 56,
+    "transitioncancel": 9,
+    "selectionchange": 5,
+    "scroll": 262,
+    "scrollend": 23,
+    "pointerout": 522,
+    "pointerover": 526,
+    "mouseout": 522,
+    "wheel": 139,
+    "mouseleave": 92,
+    "focus": 55,
+    "focusin": 55,
+    "DOMFocusIn": 55,
+    "pointerdown": 53,
+    "mousedown": 45,
+    "blur": 54,
+    "focusout": 54,
+    "DOMFocusOut": 54,
+    "pointerup": 53,
+    "mouseup": 46,
+    "click": 52,
+    "dismissableLayer.update": 12,
+    "focusScope.autoFocusOnMount": 6,
+    "rovingFocusGroup.onEntryFocus": 10,
+    "dismissableLayer.pointerDownOutside": 3,
+    "selectstart": 8,
+    "focusScope.autoFocusOnUnmount": 6,
+    "DOMActivate": 21,
+    "dblclick": 2,
+    "animationcancel": 4,
+    "dismissableLayer.focusOutside": 1
+  },
+  "slowInputEvents": [
+    {
+      "type": "click",
+      "startMs": 487291201.805,
+      "durationMs": 369.924
+    },
+    {
+      "type": "pointerdown",
+      "startMs": 487257172.726,
+      "durationMs": 158.871
+    },
+    {
+      "type": "pointerdown",
+      "startMs": 487266979.406,
+      "durationMs": 148.177
+    },
+    {
+      "type": "pointermove",
+      "startMs": 487266092.749,
+      "durationMs": 146.603
+    },
+    {
+      "type": "pointerdown",
+      "startMs": 487267408.97,
+      "durationMs": 96.1
+    },
+    {
+      "type": "click",
+      "startMs": 487286252.797,
+      "durationMs": 92.531
+    },
+    {
+      "type": "pointermove",
+      "startMs": 487265715.118,
+      "durationMs": 89.716
+    },
+    {
+      "type": "click",
+      "startMs": 487290102.044,
+      "durationMs": 87.372
+    },
+    {
+      "type": "pointerdown",
+      "startMs": 487265324.742,
+      "durationMs": 86.871
+    },
+    {
+      "type": "scroll",
+      "startMs": 487258053.806,
+      "durationMs": 81.796
+    },
+    {
+      "type": "pointerdown",
+      "startMs": 487257410.963,
+      "durationMs": 81.521
+    },
+    {
+      "type": "pointerdown",
+      "startMs": 487257334.299,
+      "durationMs": 74.743
+    },
+    {
+      "type": "pointermove",
+      "startMs": 487267164.341,
+      "durationMs": 74.227
+    },
+    {
+      "type": "pointerdown",
+      "startMs": 487257494.697,
+      "durationMs": 74.186
+    },
+    {
+      "type": "focusScope.autoFocusOnMount",
+      "startMs": 487257255.382,
+      "durationMs": 72.421
+    },
+    {
+      "type": "scroll",
+      "startMs": 487269078.034,
+      "durationMs": 69.848
+    },
+    {
+      "type": "focusScope.autoFocusOnMount",
+      "startMs": 487267054.613,
+      "durationMs": 69.387
+    },
+    {
+      "type": "scroll",
+      "startMs": 487287237.38,
+      "durationMs": 29.104
+    },
+    {
+      "type": "pointerdown",
+      "startMs": 487230335.932,
+      "durationMs": 28.206
+    },
+    {
+      "type": "scroll",
+      "startMs": 487286733.554,
+      "durationMs": 24.804
+    }
+  ],
+  "networkGroups": [
+    {
+      "resource": "https://chatgpt.com/ces/v1/t",
+      "count": 37,
+      "maxDurationMs": 7533.071,
+      "totalEncodedBytes": 77772
+    },
+    {
+      "resource": "favicon-l4nq08hd.svg",
+      "count": 21,
+      "maxDurationMs": 6125.379,
+      "totalEncodedBytes": 50135
+    },
+    {
+      "resource": "chrome-extension://:extension",
+      "count": 16,
+      "maxDurationMs": 790.889,
+      "totalEncodedBytes": 811433
+    },
+    {
+      "resource": "/backend-api/conversation/:id",
+      "count": 11,
+      "maxDurationMs": 7320.327,
+      "totalEncodedBytes": 2009419
+    },
+    {
+      "resource": "/backend-api/system_hints",
+      "count": 9,
+      "maxDurationMs": 7792.848,
+      "totalEncodedBytes": 70403
+    },
+    {
+      "resource": "https://chatgpt.com/ces/v1/rgstr",
+      "count": 6,
+      "maxDurationMs": 7531.848,
+      "totalEncodedBytes": 13207
+    },
+    {
+      "resource": "https://chatgpt.com/ces/v1/p",
+      "count": 3,
+      "maxDurationMs": 1643.512,
+      "totalEncodedBytes": 6639
+    },
+    {
+      "resource": "sprites-shell-f1821232.svg",
+      "count": 2,
+      "maxDurationMs": 600.029,
+      "totalEncodedBytes": 49230
+    },
+    {
+      "resource": "sprites-core-0981e578.svg",
+      "count": 2,
+      "maxDurationMs": 685.068,
+      "totalEncodedBytes": 339499
+    },
+    {
+      "resource": "sprites-composer-ece24c50.svg",
+      "count": 2,
+      "maxDurationMs": 684.576,
+      "totalEncodedBytes": 1395
+    },
+    {
+      "resource": "/backend-api/settings/voices",
+      "count": 2,
+      "maxDurationMs": 795.242,
+      "totalEncodedBytes": 6043
+    },
+    {
+      "resource": "/backend-api/hazelnuts",
+      "count": 2,
+      "maxDurationMs": 807.205,
+      "totalEncodedBytes": 5155
+    },
+    {
+      "resource": "/backend-api/aip/connectors/list_accessible",
+      "count": 2,
+      "maxDurationMs": 8067.892,
+      "totalEncodedBytes": 3051340
+    },
+    {
+      "resource": "/backend-api/aip/connectors/links/list_accessible",
+      "count": 2,
+      "maxDurationMs": 893.936,
+      "totalEncodedBytes": 9087
+    },
+    {
+      "resource": "/backend-api/projects/:id/saves",
+      "count": 2,
+      "maxDurationMs": 507.03,
+      "totalEncodedBytes": 5232
+    },
+    {
+      "resource": "https://chatgpt.com/ces/v1/m",
+      "count": 2,
+      "maxDurationMs": 7164.72,
+      "totalEncodedBytes": 681
+    },
+    {
+      "resource": "https://cdn.openai.com",
+      "count": 1,
+      "maxDurationMs": 1864.656,
+      "totalEncodedBytes": 56754
+    },
+    {
+      "resource": "read-frog-Bn4EKKnQ.png",
+      "count": 1,
+      "maxDurationMs": 8.258,
+      "totalEncodedBytes": 48605
+    },
+    {
+      "resource": "eec4c631-b5z1la8delvy30qf.js",
+      "count": 1,
+      "maxDurationMs": 226.901,
+      "totalEncodedBytes": 15415
+    },
+    {
+      "resource": "5ab42519-fzhbqi64p2wlarai.js",
+      "count": 1,
+      "maxDurationMs": 233.802,
+      "totalEncodedBytes": 6416
+    },
+    {
+      "resource": "e6911992-kfc01pk08alxqeyl.js",
+      "count": 1,
+      "maxDurationMs": 231.453,
+      "totalEncodedBytes": 555
+    },
+    {
+      "resource": "88605b43-nranmlkt6wbdnxxx.js",
+      "count": 1,
+      "maxDurationMs": 236.571,
+      "totalEncodedBytes": 1287
+    },
+    {
+      "resource": "be58453f-j7ux8huct2w6hv8c.js",
+      "count": 1,
+      "maxDurationMs": 238.391,
+      "totalEncodedBytes": 1756
+    },
+    {
+      "resource": "fd7f274b-ogdxhrbhukz6zm9a.js",
+      "count": 1,
+      "maxDurationMs": 243.526,
+      "totalEncodedBytes": 7661
+    },
+    {
+      "resource": "noise-watercolor-m3j88gni.webp",
+      "count": 1,
+      "maxDurationMs": 2109.528,
+      "totalEncodedBytes": 34394
+    },
+    {
+      "resource": "https://chatgpt.com/cdn-cgi/challenge-platform/h/g/:id/jsd/aae2b9a1c261/api.js",
+      "count": 1,
+      "maxDurationMs": 224.289,
+      "totalEncodedBytes": 2677
+    },
+    {
+      "resource": "70025534-m8tlqo1dyi0mkzus.js",
+      "count": 1,
+      "maxDurationMs": 222.397,
+      "totalEncodedBytes": 2742
+    },
+    {
+      "resource": "/backend-api/:id",
+      "count": 1,
+      "maxDurationMs": 323.655,
+      "totalEncodedBytes": 2470
+    },
+    {
+      "resource": "/backend-api/accounts/optimized/check",
+      "count": 1,
+      "maxDurationMs": 532.615,
+      "totalEncodedBytes": 3196
+    },
+    {
+      "resource": "/backend-api/me",
+      "count": 1,
+      "maxDurationMs": 321.442,
+      "totalEncodedBytes": 3139
+    },
+    {
+      "resource": "/backend-api/accounts/check/v4-2023-04-27",
+      "count": 1,
+      "maxDurationMs": 539.152,
+      "totalEncodedBytes": 4113
+    },
+    {
+      "resource": "/backend-api/settings/user",
+      "count": 1,
+      "maxDurationMs": 416.169,
+      "totalEncodedBytes": 5416
+    },
+    {
+      "resource": "/backend-api/gizmos/:id",
+      "count": 1,
+      "maxDurationMs": 382.082,
+      "totalEncodedBytes": 4174
+    },
+    {
+      "resource": "/backend-api/sentinel/chat-requirements/prepare",
+      "count": 1,
+      "maxDurationMs": 374.995,
+      "totalEncodedBytes": 53570
+    },
+    {
+      "resource": "f1324c00-l5gcd40hk137bbg3.js",
+      "count": 1,
+      "maxDurationMs": 283.132,
+      "totalEncodedBytes": 6040
+    },
+    {
+      "resource": "conversation-small-ftje035n.css",
+      "count": 1,
+      "maxDurationMs": 269.1,
+      "totalEncodedBytes": 19740
+    },
+    {
+      "resource": "ac827dee-fz0ce4rcf0dtbwxa.js",
+      "count": 1,
+      "maxDurationMs": 282.483,
+      "totalEncodedBytes": 692
+    },
+    {
+      "resource": "6afb0137-mnd6btpmmj0px7ab.js",
+      "count": 1,
+      "maxDurationMs": 283.328,
+      "totalEncodedBytes": 1241
+    },
+    {
+      "resource": "4e1f6607-dtmd3b6f1fegb2r0.js",
+      "count": 1,
+      "maxDurationMs": 283.086,
+      "totalEncodedBytes": 730
+    },
+    {
+      "resource": "0379e822-ljgx06r7csrckh5u.js",
+      "count": 1,
+      "maxDurationMs": 282.052,
+      "totalEncodedBytes": 1031
+    },
+    {
+      "resource": "bcf56d39-jnzqg6yft40bhwah.js",
+      "count": 1,
+      "maxDurationMs": 272.998,
+      "totalEncodedBytes": 1450
+    },
+    {
+      "resource": "e6fa0362-jvzo2u851ey8u95h.js",
+      "count": 1,
+      "maxDurationMs": 272.864,
+      "totalEncodedBytes": 1136
+    },
+    {
+      "resource": "4e18e912-cfhpn8aq7y7kja3c.js",
+      "count": 1,
+      "maxDurationMs": 272.773,
+      "totalEncodedBytes": 4135
+    },
+    {
+      "resource": "ae144ef6-n02508n8nq0ocbla.js",
+      "count": 1,
+      "maxDurationMs": 225.47,
+      "totalEncodedBytes": 5238
+    },
+    {
+      "resource": "8d5bfd5c-me1kpa2640fav0ra.js",
+      "count": 1,
+      "maxDurationMs": 232.268,
+      "totalEncodedBytes": 3115
+    },
+    {
+      "resource": "c2675c8c-ext73zh20ozvx8iy.js",
+      "count": 1,
+      "maxDurationMs": 362.304,
+      "totalEncodedBytes": 645819
+    },
+    {
+      "resource": "global-modals-dgfy4wm4.css",
+      "count": 1,
+      "maxDurationMs": 231.347,
+      "totalEncodedBytes": 2389
+    },
+    {
+      "resource": "9435784d-jon880opk3otst0f.js",
+      "count": 1,
+      "maxDurationMs": 231.11,
+      "totalEncodedBytes": 2659
+    },
+    {
+      "resource": "2831b016-bd3ulrrk4u8l4heo.js",
+      "count": 1,
+      "maxDurationMs": 232.004,
+      "totalEncodedBytes": 2740
+    },
+    {
+      "resource": "3c02c844-ixa9624frjzuk7gk.js",
+      "count": 1,
+      "maxDurationMs": 235.382,
+      "totalEncodedBytes": 5562
+    },
+    {
+      "resource": "4ce5f29c-bae010i5ku479etj.js",
+      "count": 1,
+      "maxDurationMs": 235.132,
+      "totalEncodedBytes": 738
+    },
+    {
+      "resource": "68039cf3-hnvwj2wx65h1flxn.js",
+      "count": 1,
+      "maxDurationMs": 233.825,
+      "totalEncodedBytes": 15548
+    },
+    {
+      "resource": "fc0b9bf1-lca9ty05c0c0r8kz.js",
+      "count": 1,
+      "maxDurationMs": 233.394,
+      "totalEncodedBytes": 1084
+    },
+    {
+      "resource": "19cb8032-ocezt4mu7ot3fi67.js",
+      "count": 1,
+      "maxDurationMs": 227.287,
+      "totalEncodedBytes": 2962
+    },
+    {
+      "resource": "45a9607d-o5zizowreo6dv2oh.js",
+      "count": 1,
+      "maxDurationMs": 242.473,
+      "totalEncodedBytes": 8895
+    },
+    {
+      "resource": "41a2fdf3-lf4ni6nzxb23vpby.js",
+      "count": 1,
+      "maxDurationMs": 243.794,
+      "totalEncodedBytes": 9860
+    },
+    {
+      "resource": "c19d65aa-cktjncn6cshv01dh.js",
+      "count": 1,
+      "maxDurationMs": 243.166,
+      "totalEncodedBytes": 596
+    },
+    {
+      "resource": "96098dcc-c5upxpc1x8a2jpvm.js",
+      "count": 1,
+      "maxDurationMs": 243.433,
+      "totalEncodedBytes": 3348
+    },
+    {
+      "resource": "f6a81ab7-jeigqmud8oo1q4du.js",
+      "count": 1,
+      "maxDurationMs": 243.135,
+      "totalEncodedBytes": 1770
+    },
+    {
+      "resource": "f8d34c7f-h7nsvwnwe7ueev0x.js",
+      "count": 1,
+      "maxDurationMs": 243.226,
+      "totalEncodedBytes": 1016
+    }
+  ],
+  "userscriptTimings": []
+}

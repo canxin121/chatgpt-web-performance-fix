@@ -11,7 +11,11 @@
     "benchmark": "bun run bench/benchmark.ts",
     "test": "bun test",
     "test:browser": "bun run build && bun run tests/browser-harness.ts",
-    "build": "bun run scripts/build.ts"
+    "build": "bun run scripts/build.ts",
+    "analyze:trace": "python3 analysis/analyze-trace.py",
+    "analyze:session": "bun run analysis/analyze-session-wacz.ts",
+    "analyze:diagnosis": "python3 analysis/build-diagnosis.py",
+    "analyze:validation": "python3 analysis/build-fix-validation.py"
   },
   "version": "0.1.0",
   "description": "Tampermonkey userscript for improving ChatGPT long-conversation performance.",

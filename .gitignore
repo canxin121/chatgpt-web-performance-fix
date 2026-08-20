@@ -26,6 +26,13 @@ analysis/output/*
 !analysis/output/duplicate-requests.json
 !analysis/output/pagination-analysis.json
 !analysis/output/richtext-analysis.json
+!analysis/output/new-capture-findings.json
+!analysis/output/current-frontend-assets.json
+!analysis/output/fix-validation.json
+!analysis/output/diagnosis.md
+!analysis/output/diagnosis.json
+!analysis/output/session-network-summary.json
+!analysis/output/trace-summary.json
 
 # OS/editor files.
 .DS_Store

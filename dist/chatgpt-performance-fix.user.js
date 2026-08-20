@@ -12,6 +12,7 @@
 // @downloadURL  https://raw.githubusercontent.com/canxin121/chatgpt-web-performance-fix/main/dist/chatgpt-performance-fix.user.js
 // @match        https://chatgpt.com/*
 // @run-at       document-start
+// @sandbox      raw
 // @grant        unsafeWindow
 // @grant        GM_registerMenuCommand
 // @license      MIT
@@ -21,7 +22,9 @@
   // src/optimizer.ts
   var DEFAULT_OPTIMIZER_OPTIONS = {
     minNodeCount: 250,
-    recentFullTurns: 1
+    recentFullTurns: 1,
+    preserveCurrentParent: false,
+    collapseTurnsToQuestionAnswer: false
   };
   var ALWAYS_KEEP_ROLES = new Set(["system", "developer"]);
   var KNOWN_INTERNAL_CONTENT_TYPES = new Set([
@@ -104,12 +107,65 @@
     reversePath.reverse();
     return reversePath;
   }
+  function collapseNodeEntriesToQuestionAnswer(entries, forceKeepNodeIds) {
+    const collapsed = [];
+    let turn = [];
+    const flushTurn = () => {
+      if (turn.length === 0)
+        return;
+      const user = turn.find(({ node }) => node.message?.author?.role === "user");
+      if (!user) {
+        collapsed.push(...turn);
+        turn = [];
+        return;
+      }
+      const assistants = turn.filter(({ node }) => node.message?.author?.role === "assistant" && shouldKeepHistoricMessage(node.message));
+      const answer = [...assistants].reverse().find(({ node }) => node.message?.channel === "final") ?? assistants.at(-1);
+      if (!answer) {
+        const forcedInTurn = turn.filter((entry) => forceKeepNodeIds.has(entry.id));
+        if (forcedInTurn.length > 0) {
+          const selected2 = new Set([
+            user.id,
+            ...forcedInTurn.map((entry) => entry.id)
+          ]);
+          collapsed.push(...turn.filter((entry) => selected2.has(entry.id)));
+        } else {
+          collapsed.push(...turn);
+        }
+        turn = [];
+        return;
+      }
+      const selected = new Set([user.id, answer.id]);
+      for (const entry of turn) {
+        if (forceKeepNodeIds.has(entry.id))
+          selected.add(entry.id);
+        const role = entry.node.message?.author?.role;
+        if (role && ALWAYS_KEEP_ROLES.has(role))
+          selected.add(entry.id);
+      }
+      collapsed.push(...turn.filter((entry) => selected.has(entry.id)));
+      turn = [];
+    };
+    for (const entry of entries) {
+      if (entry.node.message?.author?.role === "user")
+        flushTurn();
+      if (turn.length > 0 || entry.node.message?.author?.role === "user") {
+        turn.push(entry);
+      } else {
+        collapsed.push(entry);
+      }
+    }
+    flushTurn();
+    return collapsed;
+  }
   function optimizeConversationPayload(payload, options = {}) {
     const resolved = {
       ...DEFAULT_OPTIMIZER_OPTIONS,
       ...options,
       minNodeCount: Math.max(0, Math.floor(options.minNodeCount ?? DEFAULT_OPTIMIZER_OPTIONS.minNodeCount)),
-      recentFullTurns: Math.max(0, Math.floor(options.recentFullTurns ?? DEFAULT_OPTIMIZER_OPTIONS.recentFullTurns))
+      recentFullTurns: Math.max(0, Math.floor(options.recentFullTurns ?? DEFAULT_OPTIMIZER_OPTIONS.recentFullTurns)),
+      preserveCurrentParent: options.preserveCurrentParent ?? DEFAULT_OPTIMIZER_OPTIONS.preserveCurrentParent,
+      collapseTurnsToQuestionAnswer: options.collapseTurnsToQuestionAnswer ?? DEFAULT_OPTIMIZER_OPTIONS.collapseTurnsToQuestionAnswer
     };
     if (!isRecord(payload) || !isRecord(payload.mapping)) {
       return { payload, stats: makeStats("invalid-payload") };
@@ -159,7 +215,14 @@
     }
     const userTurns = activePath.reduce((count, { node }) => count + (node.message?.author?.role === "user" ? 1 : 0), 0);
     const firstFullTurnIndex = Math.max(0, userTurns - resolved.recentFullTurns);
-    const kept = [];
+    const forcedNodeIds = new Set([payload.current_node]);
+    if (resolved.preserveCurrentParent) {
+      const parentId = mapping[payload.current_node]?.parent;
+      if (typeof parentId === "string" && parentId.length > 0) {
+        forcedNodeIds.add(parentId);
+      }
+    }
+    let kept = [];
     const removedByKind = {};
     let currentTurnIndex = -1;
     for (const entry of activePath) {
@@ -167,11 +230,24 @@
         currentTurnIndex += 1;
       const inRecentFullTurn = resolved.recentFullTurns > 0 && currentTurnIndex >= firstFullTurnIndex;
       const keep = inRecentFullTurn || shouldKeepHistoricNode(entry.node);
-      if (keep || entry.id === payload.current_node) {
+      if (keep || forcedNodeIds.has(entry.id)) {
         kept.push(entry);
       } else {
         const kind = kindOf(entry.node);
         removedByKind[kind] = (removedByKind[kind] ?? 0) + 1;
+      }
+    }
+    if (resolved.collapseTurnsToQuestionAnswer) {
+      const collapsed = collapseNodeEntriesToQuestionAnswer(kept, forcedNodeIds);
+      if (collapsed.length < kept.length) {
+        const retainedIds = new Set(collapsed.map((entry) => entry.id));
+        for (const entry of kept) {
+          if (retainedIds.has(entry.id))
+            continue;
+          const kind = kindOf(entry.node);
+          removedByKind[kind] = (removedByKind[kind] ?? 0) + 1;
+        }
+        kept = collapsed;
       }
     }
     const removedOffPathNodes = originalNodes - activePath.length;
@@ -515,6 +591,8 @@
   var SETTINGS_KEY = "chatgpt-performance-fix:settings:v1";
   var FULL_ONCE_PREFIX = "chatgpt-performance-fix:full-once:";
   var CACHE_TTL_MS = 20000;
+  var HISTORY_CACHE_TTL_MS = 5 * 60000;
+  var INTERNAL_RESPONSE_READS = new WeakSet;
   var MODE_OPTIONS = {
     balanced: {
       minNodeCount: DEFAULT_OPTIMIZER_OPTIONS.minNodeCount,
@@ -522,7 +600,8 @@
       lazyInitialTurns: 2,
       paginatedMaxTurns: 2,
       paginatedRenderTurns: 1,
-      richTextWarmDistancePx: 8000
+      richTextWarmDistancePx: 8000,
+      codeEditorWarmDistancePx: 3000
     },
     aggressive: {
       minNodeCount: DEFAULT_OPTIMIZER_OPTIONS.minNodeCount,
@@ -530,9 +609,18 @@
       lazyInitialTurns: 2,
       paginatedMaxTurns: 2,
       paginatedRenderTurns: 1,
-      richTextWarmDistancePx: 5000
+      richTextWarmDistancePx: 5000,
+      codeEditorWarmDistancePx: 1800
     }
   };
+  function legacyOptimizerOptions(mode) {
+    return {
+      minNodeCount: MODE_OPTIONS[mode].minNodeCount,
+      recentFullTurns: 0,
+      preserveCurrentParent: true,
+      collapseTurnsToQuestionAnswer: true
+    };
+  }
   function readSettings(storage) {
     try {
       const value = JSON.parse(storage.getItem(SETTINGS_KEY) ?? "null");
@@ -545,16 +633,27 @@
     }
   }
   function yieldUntilInteractionIdle(pageWindow) {
+    const startedAt = pageWindow.performance.now();
+    const finish = () => {
+      try {
+        pageWindow.performance.measure("chatgpt-perf:history-idle-wait", {
+          start: startedAt,
+          end: pageWindow.performance.now()
+        });
+      } catch {}
+    };
     return new Promise((resolve) => {
       const afterPaint = () => {
         pageWindow.setTimeout(() => {
           if (typeof pageWindow.requestIdleCallback !== "function") {
+            finish();
             resolve();
             return;
           }
           const waitForUsefulIdleBudget = () => {
             pageWindow.requestIdleCallback((deadline) => {
               if (deadline.timeRemaining() >= 12) {
+                finish();
                 resolve();
                 return;
               }
@@ -570,6 +669,195 @@
         pageWindow.requestAnimationFrame(afterPaint);
       }
     });
+  }
+  var jsonWorkerState;
+  function ensureJsonWorker(pageWindow) {
+    if (jsonWorkerState !== undefined)
+      return jsonWorkerState;
+    if (typeof pageWindow.Worker !== "function") {
+      jsonWorkerState = null;
+      return null;
+    }
+    try {
+      const source = '(()=>{var S={minNodeCount:250,recentFullTurns:1,preserveCurrentParent:!1,collapseTurnsToQuestionAnswer:!1},h=new Set(["system","developer"]),y=new Set(["code","execution_output","thoughts"]);function P(G){return new TextEncoder().encode(JSON.stringify(G)).byteLength}function B(G){if(!G)return"root/no-message";return`${G.author?.role??"unknown"}/${G.content?.content_type??"unknown"}`}function q(G){return B(G.message)}function w(G,V={}){return{changed:G==="optimized",reason:G,originalNodes:0,activePathNodes:0,keptNodes:0,removedOffPathNodes:0,removedHistoricNodes:0,userTurns:0,recentFullTurns:0,removedByKind:{},...V}}function b(G){return typeof G==="object"&&G!==null&&!Array.isArray(G)}function g(G){if("__paginatedConversationPage"in G)return!0;let V=G.mapping;return Boolean(V&&Object.keys(V).some(($)=>$.startsWith("paginated-root:")))}function f(G){if(!G)return!0;if(G.metadata?.is_visually_hidden_from_conversation===!0)return!1;let V=G.author?.role;if(V==="user"||V&&h.has(V))return!0;if(V==="tool")return!1;if(V!=="assistant")return!0;if(G.channel==="final")return!0;if(G.recipient!=null&&G.recipient!=="all")return!1;let $=G.content?.content_type;return!$||!y.has($)}function m(G){return f(G.message)}function u(G,V){let $=[],X=new Set,Q=V;while(Q!=null){if(X.has(Q))return null;X.add(Q);let Y=G[Q];if(!Y)return null;$.push({id:Q,node:Y}),Q=Y.parent}return $.reverse(),$}function i(G,V){let $=[],X=[],Q=()=>{if(X.length===0)return;let Y=X.find(({node:J})=>J.message?.author?.role==="user");if(!Y){$.push(...X),X=[];return}let L=X.filter(({node:J})=>J.message?.author?.role==="assistant"&&f(J.message)),A=[...L].reverse().find(({node:J})=>J.message?.channel==="final")??L.at(-1);if(!A){let J=X.filter((D)=>V.has(D.id));if(J.length>0){let D=new Set([Y.id,...J.map((R)=>R.id)]);$.push(...X.filter((R)=>D.has(R.id)))}else $.push(...X);X=[];return}let z=new Set([Y.id,A.id]);for(let J of X){if(V.has(J.id))z.add(J.id);let D=J.node.message?.author?.role;if(D&&h.has(D))z.add(J.id)}$.push(...X.filter((J)=>z.has(J.id))),X=[]};for(let Y of G){if(Y.node.message?.author?.role==="user")Q();if(X.length>0||Y.node.message?.author?.role==="user")X.push(Y);else $.push(Y)}return Q(),$}function T(G,V={}){let $={...S,...V,minNodeCount:Math.max(0,Math.floor(V.minNodeCount??S.minNodeCount)),recentFullTurns:Math.max(0,Math.floor(V.recentFullTurns??S.recentFullTurns)),preserveCurrentParent:V.preserveCurrentParent??S.preserveCurrentParent,collapseTurnsToQuestionAnswer:V.collapseTurnsToQuestionAnswer??S.collapseTurnsToQuestionAnswer};if(!b(G)||!b(G.mapping))return{payload:G,stats:w("invalid-payload")};let X=G.mapping,Q=Object.keys(X).length;if(g(G))return{payload:G,stats:w("already-paginated",{originalNodes:Q,keptNodes:Q,recentFullTurns:$.recentFullTurns})};if(Q<$.minNodeCount)return{payload:G,stats:w("below-threshold",{originalNodes:Q,keptNodes:Q,recentFullTurns:$.recentFullTurns})};if(typeof G.current_node!=="string")return{payload:G,stats:w("invalid-payload",{originalNodes:Q,keptNodes:Q,recentFullTurns:$.recentFullTurns})};let Y=u(X,G.current_node);if(!Y||Y.length===0)return{payload:G,stats:w("invalid-active-path",{originalNodes:Q,keptNodes:Q,recentFullTurns:$.recentFullTurns})};let L=Y.reduce((W,{node:C})=>W+(C.message?.author?.role==="user"?1:0),0),A=Math.max(0,L-$.recentFullTurns),z=new Set([G.current_node]);if($.preserveCurrentParent){let W=X[G.current_node]?.parent;if(typeof W==="string"&&W.length>0)z.add(W)}let J=[],D={},R=-1;for(let W of Y){if(W.node.message?.author?.role==="user")R+=1;if($.recentFullTurns>0&&R>=A||m(W.node)||z.has(W.id))J.push(W);else{let U=q(W.node);D[U]=(D[U]??0)+1}}if($.collapseTurnsToQuestionAnswer){let W=i(J,z);if(W.length<J.length){let C=new Set(W.map((E)=>E.id));for(let E of J){if(C.has(E.id))continue;let U=q(E.node);D[U]=(D[U]??0)+1}J=W}}let j=Q-Y.length,Z=Y.length-J.length;if(j<=0&&Z<=0)return{payload:G,stats:w("no-reduction",{originalNodes:Q,activePathNodes:Y.length,keptNodes:Q,userTurns:L,recentFullTurns:$.recentFullTurns})};let M={};for(let W=0;W<J.length;W+=1){let{id:C,node:E}=J[W],U=J[W-1]?.id??null,N=J[W+1]?.id;M[C]={...E,id:E.id??C,parent:U,children:N?[N]:[]}}let O=new Set(J.map(({node:W})=>W.message?.id).filter((W)=>typeof W==="string")),H=Array.isArray(G.moderation_results)?G.moderation_results.filter((W)=>typeof W.message_id!=="string"||O.has(W.message_id)):G.moderation_results;return{payload:{...G,mapping:M,current_node:J.at(-1)?.id??G.current_node,...H===void 0?{}:{moderation_results:H}},stats:w("optimized",{originalNodes:Q,activePathNodes:Y.length,keptNodes:J.length,removedOffPathNodes:j,removedHistoricNodes:Z,userTurns:L,recentFullTurns:$.recentFullTurns,removedByKind:D})}}function p(G,V=new Set){if(!G.some((Y)=>Y.author?.role==="user"))return G;let $=[],X=[],Q=()=>{if(X.length===0)return;let Y=X.find((J)=>J.author?.role==="user"),L=X.filter((J)=>J.author?.role==="assistant"&&f(J)),A=[...L].reverse().find((J)=>J.channel==="final")??L.at(-1);if(!Y||!A){$.push(...X),X=[];return}let z=new Set([Y,A]);for(let J of X)if(typeof J.id==="string"&&V.has(J.id))z.add(J);$.push(...X.filter((J)=>z.has(J))),X=[]};for(let Y of G){if(Y.author?.role==="user")Q();if(X.length>0||Y.author?.role==="user")X.push(Y)}return Q(),$.length>0?$:G}function v(G,V={}){let $=Array.isArray(G.messages)?G.messages:null;if(!$)return{payload:G,stats:{changed:!1,originalMessages:0,keptMessages:0,removedMessages:0,originalBytes:0,keptBytes:0,userTurns:0,recentFullTurns:0,removedByKind:{}}};let X=Math.max(0,Math.floor(V.recentFullTurns??0)),Q=new Set(V.forceKeepMessageIds??[]),Y=$.reduce((H,_)=>H+(_.author?.role==="user"?1:0),0),L=X>0&&Y===0,A=Math.max(0,Y-X),z=[],J={},D=-1;for(let H of $){if(H.author?.role==="user")D+=1;let _=H.id,W=X>0&&D>=A;if(L||typeof _==="string"&&Q.has(_)||W||f(H))z.push(H);else{let E=B(H);J[E]=(J[E]??0)+1}}if(V.collapseTurnsToQuestionAnswer===!0&&X===0&&Y>0){let H=p(z,Q);if(H.length<z.length){let _=new Set(H);for(let W of z){if(_.has(W))continue;let C=B(W);J[C]=(J[C]??0)+1}z=H}}if($.length>0&&z.length===0){let H=$.at(-1);z.push(H);let _=B(H);if(J[_]!=null){if(J[_]-=1,J[_]<=0)delete J[_]}}let R=new Set(z.map((H)=>H.id).filter((H)=>typeof H==="string")),j=Array.isArray(G.moderation_results)?G.moderation_results.filter((H)=>typeof H.message_id!=="string"||R.has(H.message_id)):G.moderation_results,Z=$.reduce((H,_)=>H+P(_),0),M=z.reduce((H,_)=>H+P(_),0),O=z.length!==$.length;return{payload:O?{...G,messages:z,...j===void 0?{}:{moderation_results:j}}:G,stats:{changed:O,originalMessages:$.length,keptMessages:z.length,removedMessages:$.length-z.length,originalBytes:Z,keptBytes:M,userTurns:Y,recentFullTurns:X,removedByKind:J}}}function x(G,V={}){if(G.length===0)return[];let $=Math.max(1,Math.floor(V.maxTurns??1)),X=Math.max(1,Math.floor(V.maxMessages??16)),Q=Math.max(1024,Math.floor(V.maxBytes??131072)),Y=V.allowSplitTurns??!0,L=[],A=[];for(let Z of G){if(Z.author?.role==="user"&&A.length>0)L.push(A),A=[];A.push(Z)}if(A.length>0)L.push(A);let z=[];for(let Z of L){let M=Z.reduce((C,E)=>C+P(E),0);if(!Y||Z.length<=X&&M<=Q){z.push({messages:Z,startsTurn:!0,bytes:M});continue}let O=[],H=[],_=0;for(let C=Z.length-1;C>=0;C-=1){let E=Z[C],U=P(E);if(H.length>0&&(H.length+1>X||_+U>Q))O.push({messages:H,bytes:_}),H=[],_=0;H.unshift(E),_+=U}if(H.length>0)O.push({messages:H,bytes:_});let W=O.reverse();for(let C=0;C<W.length;C+=1){let E=W[C];z.push({...E,startsTurn:C===0})}}let J=[],D=[],R=0,j=0;for(let Z=z.length-1;Z>=0;Z-=1){let M=z[Z],O=j+(M.startsTurn?1:0);if(D.length>0&&(O>$||D.length+M.messages.length>X||R+M.bytes>Q))J.push(D),D=[],R=0,j=0;D=[...M.messages,...D],R+=M.bytes,j+=M.startsTurn?1:0}if(D.length>0)J.push(D);return J}function F(G){if(G.buffer instanceof ArrayBuffer)return JSON.parse(new TextDecoder().decode(G.buffer));return F(G)}function l(G){return G==="finished_successfully"||G==="finished"||G==="complete"}function d(G){if(typeof G.current_node!=="string"||!Array.isArray(G.messages))return;return G.messages.find((V)=>V.id===G.current_node)}function c(G){if(G.async_status!=null||!Array.isArray(G.messages))return!0;if(G.messages.some(($)=>["in_progress","streaming","pending"].includes(String($.status))))return!0;let V=d(G);return!V||!l(V.status)}function n(G){return!c(G)}function r(G){if(!Array.isArray(G.messages)||typeof G.current_node!=="string")return[];let V=new Map(G.messages.filter((Q)=>typeof Q.id==="string").map((Q)=>[Q.id,Q])),$=new Set([G.current_node]),X=V.get(G.current_node);if(X?.author?.role==="tool"){let Q=X.metadata?.parent_id;if(typeof Q==="string"&&V.has(Q))$.add(Q)}return[...$]}var K=new Map,o=1;function t(G){if(G.author?.role!=="assistant")return!1;if(G.metadata?.is_visually_hidden_from_conversation===!0)return!1;if(G.recipient!=null&&G.recipient!=="all")return!1;if(G.channel==="final")return!0;return!["code","execution_output","thoughts","reasoning_recap"].includes(String(G.content?.content_type??""))}function a(G,V){let $=-1;for(let X=0;X<G.length;X+=1)if(G[X]?.author?.role==="user")$=X;if($<0)return!1;return G.slice($+1).some((X)=>t(X)&&(!V||X.channel==="final"))}function s(G,V){let $=new Set,X=[];for(let Q of[...G,...V]){if(typeof Q.id==="string"){if($.has(Q.id))continue;$.add(Q.id)}X.push(Q)}return X}function e(G,V){return{...G,messages:s(Array.isArray(V.messages)?V.messages:[],Array.isArray(G.messages)?G.messages:[]),page_info:V.page_info,safe_urls:[...new Set([...V.safe_urls??[],...G.safe_urls??[]])],blocked_urls:[...new Set([...V.blocked_urls??[],...G.blocked_urls??[]])]}}function I(G,V){let $=Array.isArray(V.payload.messages)?V.payload.messages:[],X=V.payload.page_info?.has_previous_page===!0&&typeof V.payload.page_info.start_cursor==="string"?V.payload.page_info.start_cursor:null;return{token:G,complete:a($,V.requireFinal),cursor:X,messageCount:$.length}}var GG=Math.random().toString(36).slice(2),VG=1;function XG(G,V){let $=G.split(`\n`),X=[];for(let z=0;z<$.length;z+=1){let J=$[z].match(/^\\s*(`{3,}|~{3,})\\s*([^`]*)$/);if(!J)continue;let D=J[1],R=D[0],j=new RegExp(`^\\\\s*${R}{${D.length},}\\\\s*$`),Z=z+1;while(Z<$.length&&!j.test($[Z]))Z+=1;if(Z>=$.length)continue;let M=J[2].trim().split(/\\s+/,1)[0]??"",O=$.slice(z+1,Z).join(`\n`);X.push({start:z,end:Z,language:M,code:O}),z=Z}let Q=X.reduce((z,J)=>z+J.code.length,0);if(X.length<4&&Q<8000)return{text:G,blocks:[]};let Y=new Map(X.map((z)=>[z.start,z])),L=[],A=[];for(let z=0;z<$.length;z+=1){let J=Y.get(z);if(!J){L.push($[z]);continue}let D=`${GG}-${V}-${VG++}`,R=Math.max(1,J.code.split(`\n`).length);A.push({token:D,language:J.language,code:J.code,lineCount:R}),L.push(`[代码块](https://chatgpt.com/#cgptperf-code=${D}&lines=${R})`),z=J.end}return{text:L.join(`\n`),blocks:A}}function $G(G){if(!Array.isArray(G.messages))return{payload:G,codeBlocks:[]};let V=[],$=G.messages.map((X,Q)=>{if(!["assistant","user"].includes(String(X.author?.role))||!Array.isArray(X.content?.parts))return X;let Y=!1,L=X.content.parts.map((A,z)=>{if(typeof A!=="string")return A;let J=XG(A,`m${Q}p${z}`);if(J.blocks.length===0)return A;return Y=!0,V.push(...J.blocks),J.text});if(!Y)return X;return{...X,content:{...X.content,parts:L}}});return{payload:{...G,messages:$},codeBlocks:V}}function k(G,V){let $=c(G),X=V.apiKind==="paginated-initial",Q=v(G,{recentFullTurns:X&&$?V.recentFullTurns??1:0,forceKeepMessageIds:X?r(G):[],collapseTurnsToQuestionAnswer:V.apiKind==="paginated-messages"||X&&!$}),Y=V.lightweightCodeBlocks===!0&&!$?$G(Q.payload):{payload:Q.payload,codeBlocks:[]},L=Array.isArray(Y.payload.messages)?Y.payload.messages:[];return{payload:Y.payload,stats:Q.stats,chunks:x(L,V.chunkOptions),codeBlocks:Y.codeBlocks,active:$,cacheable:X&&n(G)}}self.addEventListener("message",(G)=>{let V=G.data;try{if(V.operation==="parse"){self.postMessage({id:V.id,ok:!0,value:F(V)});return}if(V.operation==="optimize-legacy"){let X=F(V),Q=T(X,V.legacyOptions);self.postMessage({id:V.id,ok:!0,value:{payload:Q.payload,stats:Q.stats}});return}if(V.operation==="start-paginated-job"){let X=F(V),Q=`page-${o++}`,Y={payload:X,requireFinal:V.requireFinal===!0};K.set(Q,Y),self.postMessage({id:V.id,ok:!0,value:I(Q,Y)});return}if(V.operation==="prepend-paginated-job"){let X=V.token??"",Q=K.get(X);if(!Q)throw Error("Unknown paginated job");let Y=F(V);Q.payload=e(Q.payload,Y),self.postMessage({id:V.id,ok:!0,value:I(X,Q)});return}if(V.operation==="finish-paginated-job"){let X=V.token??"",Q=K.get(X);if(!Q)throw Error("Unknown paginated job");K.delete(X),self.postMessage({id:V.id,ok:!0,value:k(Q.payload,V)});return}if(V.operation==="cancel-paginated-job"){K.delete(V.token??""),self.postMessage({id:V.id,ok:!0,value:null});return}let $=F(V);self.postMessage({id:V.id,ok:!0,value:k($,V)})}catch($){self.postMessage({id:V.id,ok:!1,error:$ instanceof Error?$.message:String($)})}});})();\n';
+      const url = pageWindow.URL.createObjectURL(new pageWindow.Blob([source], { type: "application/javascript" }));
+      const worker = new pageWindow.Worker(url, {
+        name: "chatgpt-performance-json"
+      });
+      pageWindow.URL.revokeObjectURL(url);
+      const state = {
+        worker,
+        nextId: 1,
+        pending: new Map
+      };
+      worker.addEventListener("message", (event) => {
+        const reply = event.data;
+        const pending = state.pending.get(reply.id);
+        if (!pending)
+          return;
+        state.pending.delete(reply.id);
+        const finishedAt = pageWindow.performance.now();
+        const elapsed = finishedAt - pending.startedAt;
+        try {
+          pageWindow.performance.measure(`chatgpt-perf:worker:${pending.operation}`, {
+            start: pending.startedAt,
+            end: finishedAt,
+            detail: { durationMs: elapsed }
+          });
+        } catch {}
+        const root = pageWindow.document.documentElement;
+        const count = Number(root.dataset.chatgptJsonWorkerParses ?? "0");
+        const total = Number(root.dataset.chatgptJsonWorkerTotalMs ?? "0");
+        root.dataset.chatgptJsonWorkerParses = String(count + 1);
+        root.dataset.chatgptJsonWorkerTotalMs = String(Math.round(total + elapsed));
+        if (reply.ok)
+          pending.resolve(reply.value);
+        else
+          pending.reject(new Error(reply.error ?? "Worker JSON parse failed"));
+      });
+      worker.addEventListener("error", () => {
+        for (const pending of state.pending.values()) {
+          pending.reject(new Error("JSON worker failed"));
+        }
+        state.pending.clear();
+        worker.terminate();
+        jsonWorkerState = null;
+      });
+      jsonWorkerState = state;
+      return state;
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] Could not create JSON worker`, error);
+      jsonWorkerState = null;
+      return null;
+    }
+  }
+  async function runOptimizerWorker(pageWindow, request, transfer = []) {
+    const state = ensureJsonWorker(pageWindow);
+    if (!state)
+      throw new Error("Optimizer worker is unavailable");
+    const id = state.nextId++;
+    return await new Promise((resolve, reject) => {
+      state.pending.set(id, {
+        resolve,
+        reject,
+        startedAt: pageWindow.performance.now(),
+        operation: String(request.operation ?? "unknown")
+      });
+      state.worker.postMessage({ id, ...request }, transfer);
+    });
+  }
+  async function optimizeLegacyOffMain(pageWindow, text, options) {
+    try {
+      return await runOptimizerWorker(pageWindow, {
+        operation: "optimize-legacy",
+        text,
+        legacyOptions: options
+      });
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] Worker legacy optimization fell back`, error);
+      const payload = JSON.parse(text);
+      return optimizeConversationPayload(payload, options);
+    }
+  }
+  async function optimizePaginatedOffMain(pageWindow, text, apiKind, mode) {
+    try {
+      return await runOptimizerWorker(pageWindow, {
+        operation: "optimize-paginated",
+        text,
+        apiKind,
+        recentFullTurns: MODE_OPTIONS[mode].recentFullTurns,
+        lightweightCodeBlocks: true,
+        chunkOptions: {
+          maxTurns: MODE_OPTIONS[mode].paginatedRenderTurns,
+          maxMessages: Number.MAX_SAFE_INTEGER,
+          maxBytes: Number.MAX_SAFE_INTEGER,
+          allowSplitTurns: false
+        }
+      });
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] Worker paginated optimization fell back`, error);
+      const payload = JSON.parse(text);
+      const active = hasActivePaginatedWork(payload);
+      const initial = apiKind === "paginated-initial";
+      const result = optimizePaginatedConversationPayload(payload, {
+        recentFullTurns: initial && active ? MODE_OPTIONS[mode].recentFullTurns : 0,
+        forceKeepMessageIds: initial ? requiredInitialMessageIds(payload) : [],
+        collapseTurnsToQuestionAnswer: apiKind === "paginated-messages" || initial && !active
+      });
+      return {
+        payload: result.payload,
+        stats: result.stats,
+        chunks: splitPaginatedMessagesNewestFirst(result.payload.messages ?? [], {
+          maxTurns: MODE_OPTIONS[mode].paginatedRenderTurns,
+          maxMessages: Number.MAX_SAFE_INTEGER,
+          maxBytes: Number.MAX_SAFE_INTEGER,
+          allowSplitTurns: false
+        }),
+        active,
+        cacheable: initial && isIdlePaginatedConversation(payload)
+      };
+    }
+  }
+  async function startPaginatedWorkerJob(pageWindow, buffer, requireFinal) {
+    return runOptimizerWorker(pageWindow, {
+      operation: "start-paginated-job",
+      buffer,
+      requireFinal
+    }, [buffer]);
+  }
+  async function prependPaginatedWorkerJob(pageWindow, token, buffer) {
+    return runOptimizerWorker(pageWindow, {
+      operation: "prepend-paginated-job",
+      token,
+      buffer
+    }, [buffer]);
+  }
+  async function finishPaginatedWorkerJob(pageWindow, token, apiKind, mode) {
+    return runOptimizerWorker(pageWindow, {
+      operation: "finish-paginated-job",
+      token,
+      apiKind,
+      recentFullTurns: MODE_OPTIONS[mode].recentFullTurns,
+      lightweightCodeBlocks: true,
+      chunkOptions: {
+        maxTurns: MODE_OPTIONS[mode].paginatedRenderTurns,
+        maxMessages: Number.MAX_SAFE_INTEGER,
+        maxBytes: Number.MAX_SAFE_INTEGER,
+        allowSplitTurns: false
+      }
+    });
+  }
+  async function cancelPaginatedWorkerJob(pageWindow, token) {
+    try {
+      await runOptimizerWorker(pageWindow, {
+        operation: "cancel-paginated-job",
+        token
+      });
+    } catch {}
+  }
+  async function parseJsonOffMain(pageWindow, text) {
+    if (text.length < 128 * 1024)
+      return JSON.parse(text);
+    const state = ensureJsonWorker(pageWindow);
+    if (!state)
+      return JSON.parse(text);
+    const id = state.nextId++;
+    try {
+      return await new Promise((resolve, reject) => {
+        state.pending.set(id, {
+          resolve,
+          reject,
+          startedAt: pageWindow.performance.now()
+        });
+        state.worker.postMessage({ id, operation: "parse", text });
+      });
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] Worker parse fell back to main thread`, error);
+      return JSON.parse(text);
+    }
+  }
+  async function responseJsonOffMain(pageWindow, response) {
+    return parseJsonOffMain(pageWindow, await response.text());
   }
   function rewriteGetRequest(pageWindow, input, init, rewrittenUrl) {
     const requestLike = input;
@@ -592,6 +880,14 @@
     };
     return [new pageWindow.URL(rewrittenUrl).href, rewrittenInit];
   }
+  function findConversationCodeMirrorContainer(pageWindow, target) {
+    if (!(target instanceof pageWindow.Element))
+      return null;
+    const container = target.closest('[class*="_codemirror"]');
+    if (!container)
+      return null;
+    return container.closest('[data-message-id], .markdown, [class*="MarkdownContent"], [class*="SmoothedMarkdown"]') ? container : null;
+  }
   function installManualPaginationObserver(pageWindow) {
     const marker = "__chatgptPerformanceFixIntersectionObserver";
     if (Reflect.get(pageWindow, marker))
@@ -611,6 +907,7 @@
       button;
       loading = false;
       fallbackResetTimer;
+      deferredCodeMirrorTargets = new Map;
       constructor(callback, options) {
         this.callback = callback;
         this.options = options;
@@ -707,13 +1004,45 @@
         return this.observer;
       }
       observe(target) {
-        this.ensureObserver(target).observe(target);
+        const observer = this.ensureObserver(target);
+        const container = findConversationCodeMirrorContainer(pageWindow, target);
+        if (container && container.getAttribute("data-chatgpt-rich-editor-state") !== "hot") {
+          if (this.deferredCodeMirrorTargets.has(target))
+            return;
+          const attributeObserver = new pageWindow.MutationObserver(() => {
+            if (container.getAttribute("data-chatgpt-rich-editor-state") !== "hot") {
+              return;
+            }
+            attributeObserver.disconnect();
+            this.deferredCodeMirrorTargets.delete(target);
+            observer.observe(target);
+            const root2 = pageWindow.document.documentElement;
+            const count2 = Number(root2.dataset.chatgptCodeMirrorIoResumed ?? "0");
+            root2.dataset.chatgptCodeMirrorIoResumed = String(count2 + 1);
+          });
+          attributeObserver.observe(container, {
+            attributes: true,
+            attributeFilter: ["data-chatgpt-rich-editor-state"]
+          });
+          this.deferredCodeMirrorTargets.set(target, attributeObserver);
+          const root = pageWindow.document.documentElement;
+          const count = Number(root.dataset.chatgptCodeMirrorIoDeferred ?? "0");
+          root.dataset.chatgptCodeMirrorIoDeferred = String(count + 1);
+          return;
+        }
+        observer.observe(target);
       }
       unobserve(target) {
+        this.deferredCodeMirrorTargets.get(target)?.disconnect();
+        this.deferredCodeMirrorTargets.delete(target);
         this.observer?.unobserve(target);
       }
       disconnect() {
         this.observer?.disconnect();
+        for (const observer of this.deferredCodeMirrorTargets.values()) {
+          observer.disconnect();
+        }
+        this.deferredCodeMirrorTargets.clear();
         if (this.fallbackResetTimer != null) {
           pageWindow.clearTimeout(this.fallbackResetTimer);
         }
@@ -896,11 +1225,201 @@ html[data-chatgpt-performance-fix="large"] [data-message-id] {
     const mount = pageWindow.document.head ?? pageWindow.document.documentElement;
     mount?.append(style);
   }
-  function installRichTextPerformanceFix(pageWindow, warmDistancePx) {
+  var staticCodeBlocks = new Map;
+  var staticCodeHydrated = new WeakSet;
+  var staticCodeFillQueue = [];
+  var staticCodeFillHandle = null;
+  var staticCodeHydratorInstalled = false;
+  function scheduleStaticCodeFill(pageWindow) {
+    if (staticCodeFillHandle != null)
+      return;
+    const drain = (deadline) => {
+      staticCodeFillHandle = null;
+      let filled = 0;
+      while (staticCodeFillQueue.length > 0 && filled < 2) {
+        if (deadline && deadline.timeRemaining() < 8)
+          break;
+        const item = staticCodeFillQueue.shift();
+        if (!item.container.isConnected)
+          continue;
+        item.code.textContent = item.block.code;
+        item.copy.disabled = false;
+        item.container.dataset.chatgptStaticCodeState = "ready";
+        filled += 1;
+      }
+      if (staticCodeFillQueue.length > 0)
+        scheduleStaticCodeFill(pageWindow);
+    };
+    if (typeof pageWindow.requestIdleCallback === "function") {
+      staticCodeFillHandle = pageWindow.requestIdleCallback(drain);
+    } else {
+      staticCodeFillHandle = pageWindow.requestAnimationFrame(() => drain());
+    }
+  }
+  function staticCodeToken(anchor) {
+    try {
+      const url = new URL(anchor.href);
+      if (url.origin !== "https://chatgpt.com")
+        return null;
+      const params = new URLSearchParams(url.hash.slice(1));
+      return params.get("cgptperf-code");
+    } catch {
+      return null;
+    }
+  }
+  var STATIC_CODE_MARKER_RE = /\[代码块\]\(https:\/\/chatgpt\.com\/#cgptperf-code=([^&\s)]+)&lines=\d+\)/g;
+  function restoreStaticCodeMarkdown(text) {
+    if (!text.includes("#cgptperf-code="))
+      return text;
+    return text.replace(STATIC_CODE_MARKER_RE, (full, token) => {
+      const block = staticCodeBlocks.get(token);
+      if (!block)
+        return full;
+      const fence = block.code.includes("```") ? "````" : "```";
+      const language = block.language ? block.language : "";
+      return `${fence}${language}
+${block.code}
+${fence}`;
+    });
+  }
+  function restoreStaticCodeTextarea(pageWindow, textarea) {
+    if (!textarea.value.includes("#cgptperf-code="))
+      return;
+    const restored = restoreStaticCodeMarkdown(textarea.value);
+    if (restored === textarea.value)
+      return;
+    const setter = Object.getOwnPropertyDescriptor(pageWindow.HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(textarea, restored);
+    textarea.dispatchEvent(new pageWindow.InputEvent("input", {
+      bubbles: true,
+      inputType: "insertReplacementText",
+      data: null
+    }));
+  }
+  function restoreStaticCodeRequestInit(init) {
+    if (!init || typeof init.body !== "string" || !init.body.includes("#cgptperf-code=")) {
+      return init;
+    }
+    const body = restoreStaticCodeMarkdown(init.body);
+    return body === init.body ? init : { ...init, body };
+  }
+  function hydrateStaticCodeAnchor(pageWindow, anchor) {
+    if (staticCodeHydrated.has(anchor))
+      return;
+    const token = staticCodeToken(anchor);
+    const block = token ? staticCodeBlocks.get(token) : undefined;
+    if (!token || !block)
+      return;
+    staticCodeHydrated.add(anchor);
+    const lineHeight = 20;
+    const collapsedHeight = Math.min(420, Math.max(92, block.lineCount * lineHeight + 44));
+    const container = pageWindow.document.createElement("div");
+    container.dataset.chatgptStaticCode = token;
+    container.dataset.chatgptStaticCodeState = "loading";
+    container.style.height = `${collapsedHeight}px`;
+    const header = pageWindow.document.createElement("div");
+    header.dataset.chatgptStaticCodeHeader = "true";
+    const label = pageWindow.document.createElement("span");
+    label.textContent = block.language || "code";
+    const actions = pageWindow.document.createElement("span");
+    actions.dataset.chatgptStaticCodeActions = "true";
+    const expand = pageWindow.document.createElement("button");
+    expand.type = "button";
+    expand.textContent = "展开";
+    expand.addEventListener("click", () => {
+      const expanded = container.dataset.chatgptStaticCodeExpanded === "true";
+      container.dataset.chatgptStaticCodeExpanded = expanded ? "false" : "true";
+      container.style.height = expanded ? `${collapsedHeight}px` : "auto";
+      expand.textContent = expanded ? "展开" : "收起";
+    });
+    const copy = pageWindow.document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "复制";
+    copy.disabled = true;
+    copy.addEventListener("click", async () => {
+      try {
+        await pageWindow.navigator.clipboard.writeText(block.code);
+        copy.textContent = "已复制";
+        pageWindow.setTimeout(() => copy.textContent = "复制", 1200);
+      } catch {
+        copy.textContent = "复制失败";
+        pageWindow.setTimeout(() => copy.textContent = "复制", 1200);
+      }
+    });
+    actions.append(expand, copy);
+    header.append(label, actions);
+    const pre = pageWindow.document.createElement("pre");
+    const code = pageWindow.document.createElement("code");
+    code.textContent = "";
+    pre.append(code);
+    container.append(header, pre);
+    const replaceTarget = anchor.parentElement?.tagName === "P" && anchor.parentElement.childNodes.length === 1 ? anchor.parentElement : anchor;
+    replaceTarget.replaceWith(container);
+    const rect = container.getBoundingClientRect();
+    if (rect.bottom >= 0 && rect.top <= pageWindow.innerHeight) {
+      code.textContent = block.code;
+      copy.disabled = false;
+      container.dataset.chatgptStaticCodeState = "ready";
+    } else {
+      staticCodeFillQueue.push({ block, container, code, copy });
+      scheduleStaticCodeFill(pageWindow);
+    }
+  }
+  function scanStaticCodeMarkers(pageWindow, node) {
+    if (!(node instanceof pageWindow.Element))
+      return;
+    const messageScope = node.matches("[data-message-id]") || node.closest("[data-message-id]") ? node : node.querySelector("[data-message-id]");
+    if (!messageScope)
+      return;
+    if (node instanceof pageWindow.HTMLTextAreaElement) {
+      restoreStaticCodeTextarea(pageWindow, node);
+    }
+    if (node instanceof pageWindow.HTMLAnchorElement) {
+      hydrateStaticCodeAnchor(pageWindow, node);
+    }
+    for (const textarea of node.querySelectorAll("textarea")) {
+      restoreStaticCodeTextarea(pageWindow, textarea);
+    }
+    for (const anchor of node.querySelectorAll('a[href^="https://chatgpt.com/#cgptperf-code="]')) {
+      hydrateStaticCodeAnchor(pageWindow, anchor);
+    }
+  }
+  function installStaticCodeHydrator(pageWindow) {
+    if (staticCodeHydratorInstalled)
+      return;
+    staticCodeHydratorInstalled = true;
+    const root = pageWindow.document.documentElement;
+    if (!root)
+      return;
+    scanStaticCodeMarkers(pageWindow, root);
+    const observer = new pageWindow.MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes)
+          scanStaticCodeMarkers(pageWindow, node);
+      }
+    });
+    observer.observe(root, { childList: true, subtree: true });
+  }
+  function registerStaticCodeBlocks(pageWindow, blocks) {
+    if (!blocks?.length)
+      return;
+    for (const block of blocks)
+      staticCodeBlocks.set(block.token, block);
+    while (staticCodeBlocks.size > 1024) {
+      const oldest = staticCodeBlocks.keys().next().value;
+      if (typeof oldest !== "string")
+        break;
+      staticCodeBlocks.delete(oldest);
+    }
+    installStaticCodeHydrator(pageWindow);
+    scanStaticCodeMarkers(pageWindow, pageWindow.document.documentElement);
+  }
+  function installRichTextPerformanceFix(pageWindow, warmDistancePx, editorWarmDistancePx) {
     const marker = "__chatgptRichTextPerformanceFixInstalled";
     if (Reflect.get(pageWindow, marker))
       return;
     Reflect.set(pageWindow, marker, true);
+    const smoothedMarkdownSourceHints = new Set(["/2afb55f3-"]);
     try {
       let visibilityOwner = pageWindow.Document?.prototype ?? null;
       let visibilityDescriptor;
@@ -919,7 +1438,7 @@ html[data-chatgpt-performance-fix="large"] [data-message-id] {
             const actual = nativeVisibilityGet.call(this);
             if (this === pageWindow.document && actual !== "hidden") {
               const stack = new Error().stack ?? "";
-              if (stack.includes("/2afb55f3-")) {
+              if ([...smoothedMarkdownSourceHints].some((hint) => stack.includes(hint))) {
                 pageWindow.document.documentElement.dataset.chatgptSmoothedMarkdownBypass = "enabled";
                 return "hidden";
               }
@@ -972,6 +1491,58 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
   min-height: 5rem;
 }
 
+html [data-chatgpt-static-code] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 92px;
+  overflow: hidden;
+  border: 1px solid rgba(127, 127, 127, .22);
+  border-radius: 10px;
+  background: var(--main-surface-secondary, rgba(127, 127, 127, .08));
+  margin: .75rem 0;
+}
+html [data-chatgpt-static-code-header] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(127, 127, 127, .18);
+  font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+html [data-chatgpt-static-code-actions] {
+  display: inline-flex;
+  gap: 6px;
+}
+html [data-chatgpt-static-code] button {
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 7px;
+  background: rgba(127, 127, 127, .14);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+html [data-chatgpt-static-code] button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+html [data-chatgpt-static-code] pre {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre;
+  tab-size: 2;
+  font: 12px/20px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+html [data-chatgpt-static-code-state="loading"] pre {
+  background: linear-gradient(90deg, transparent, rgba(127,127,127,.08), transparent);
+}
+
 @media print {
   html [class*="SmoothedCodeBlock"],
   html [class*="_codemirror"],
@@ -1002,15 +1573,50 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
     class RichTextResizeObserver {
       native;
       skipped = new Set;
+      deferredCodeMirrorTargets = new Map;
       constructor(callback) {
         this.native = new NativeResizeObserver((entries) => callback(entries, this));
       }
       observe(target, options) {
         if (isSmoothedCodeMeasurement(target)) {
           this.skipped.add(target);
+          const stack = new Error().stack ?? "";
+          for (const match of stack.matchAll(/https:\/\/[^/]+\/(?:cdn\/)?assets\/([^/:]+\.js)/g)) {
+            const filename = match[1];
+            if (!filename || filename.includes("performance-fix"))
+              continue;
+            const hint = `/${filename.split("-")[0]}-`;
+            smoothedMarkdownSourceHints.add(hint);
+          }
           const root2 = pageWindow.document.documentElement;
+          root2.dataset.chatgptSmoothedMarkdownSourceCount = String(smoothedMarkdownSourceHints.size);
           const count = Number(root2.dataset.chatgptRichTextSkippedResizeObservers ?? "0");
           root2.dataset.chatgptRichTextSkippedResizeObservers = String(count + 1);
+          return;
+        }
+        const container = findConversationCodeMirrorContainer(pageWindow, target);
+        if (container && container.getAttribute("data-chatgpt-rich-editor-state") !== "hot") {
+          if (this.deferredCodeMirrorTargets.has(target))
+            return;
+          const attributeObserver = new pageWindow.MutationObserver(() => {
+            if (container.getAttribute("data-chatgpt-rich-editor-state") !== "hot") {
+              return;
+            }
+            attributeObserver.disconnect();
+            this.deferredCodeMirrorTargets.delete(target);
+            this.native.observe(target, options);
+            const root3 = pageWindow.document.documentElement;
+            const count2 = Number(root3.dataset.chatgptCodeMirrorRoResumed ?? "0");
+            root3.dataset.chatgptCodeMirrorRoResumed = String(count2 + 1);
+          });
+          attributeObserver.observe(container, {
+            attributes: true,
+            attributeFilter: ["data-chatgpt-rich-editor-state"]
+          });
+          this.deferredCodeMirrorTargets.set(target, attributeObserver);
+          const root2 = pageWindow.document.documentElement;
+          const count = Number(root2.dataset.chatgptCodeMirrorRoDeferred ?? "0");
+          root2.dataset.chatgptCodeMirrorRoDeferred = String(count + 1);
           return;
         }
         this.native.observe(target, options);
@@ -1018,10 +1624,16 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
       unobserve(target) {
         if (this.skipped.delete(target))
           return;
+        this.deferredCodeMirrorTargets.get(target)?.disconnect();
+        this.deferredCodeMirrorTargets.delete(target);
         this.native.unobserve(target);
       }
       disconnect() {
         this.skipped.clear();
+        for (const observer of this.deferredCodeMirrorTargets.values()) {
+          observer.disconnect();
+        }
+        this.deferredCodeMirrorTargets.clear();
         this.native.disconnect();
       }
     }
@@ -1137,6 +1749,7 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
       return null;
     };
     const effectiveWarmDistance = Math.max(1500, Math.floor(warmDistancePx));
+    const effectiveEditorWarmDistance = Math.max(800, Math.floor(editorWarmDistancePx));
     const scanWarmDistance = () => {
       warmScanFrame = null;
       for (const element of [...coldElements]) {
@@ -1150,7 +1763,8 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
           continue;
         }
         const rect = element.getBoundingClientRect();
-        if (rect.bottom < -effectiveWarmDistance || rect.top > pageWindow.innerHeight + effectiveWarmDistance) {
+        const itemWarmDistance = item.attribute === "data-chatgpt-rich-editor-state" ? effectiveEditorWarmDistance : effectiveWarmDistance;
+        if (rect.bottom < -itemWarmDistance || rect.top > pageWindow.innerHeight + itemWarmDistance) {
           continue;
         }
         const visibleNow = rect.bottom >= 0 && rect.top <= pageWindow.innerHeight;
@@ -1193,6 +1807,7 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
     const root = pageWindow.document.documentElement;
     if (root) {
       root.dataset.chatgptRichTextWarmDistancePx = String(effectiveWarmDistance);
+      root.dataset.chatgptCodeEditorWarmDistancePx = String(effectiveEditorWarmDistance);
       scanForHeavyElements(root);
       pageWindow.addEventListener("scroll", scheduleWarmScan, {
         capture: true,
@@ -1285,16 +1900,155 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
     }
     return clone;
   }
+  async function readResponseText(response) {
+    INTERNAL_RESPONSE_READS.add(response);
+    try {
+      return await response.text();
+    } finally {
+      INTERNAL_RESPONSE_READS.delete(response);
+    }
+  }
+  async function fingerprintResponseBody(pageWindow, body) {
+    try {
+      const encoded = new pageWindow.TextEncoder().encode(body);
+      const digest = await pageWindow.crypto.subtle.digest("SHA-256", encoded);
+      return `${body.length}:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    } catch {
+      const updateTime = body.match(/"update_time"\s*:\s*([^,}\n]+)/)?.[1] ?? "";
+      const currentNode = body.match(/"current_node"\s*:\s*"([^"]+)"/)?.[1] ?? "";
+      return `${body.length}:${updateTime}:${currentNode}:${body.slice(-256)}`;
+    }
+  }
+  function cloneJsonPayload(pageWindow, payload, body) {
+    try {
+      return pageWindow.structuredClone(payload);
+    } catch {
+      return JSON.parse(body);
+    }
+  }
+  function installLegacyResponseFallback(pageWindow, mode) {
+    const marker = "__chatgptPerformanceFixResponseFallback";
+    const existing = Reflect.get(pageWindow, marker);
+    if (existing?.clear)
+      return { clear: existing.clear };
+    const prototype = pageWindow.Response?.prototype;
+    if (!prototype)
+      return { clear: () => {
+        return;
+      } };
+    const nativeJson = prototype.json;
+    const nativeText = prototype.text;
+    const perResponse = new WeakMap;
+    const byUrl = new Map;
+    const incrementMetric = (name) => {
+      const root = pageWindow.document.documentElement;
+      const current = Number(root.dataset[name] ?? "0");
+      root.dataset[name] = String(current + 1);
+    };
+    const shouldHandle = (response) => {
+      if (INTERNAL_RESPONSE_READS.has(response) || !response.ok || response.bodyUsed) {
+        return false;
+      }
+      const match = matchConversationApiUrl(response.url, pageWindow.location.href);
+      if (match?.kind !== "legacy-full")
+        return false;
+      try {
+        const url = new pageWindow.URL(response.url, pageWindow.location.href);
+        return !["1", "true"].includes(url.searchParams.get("include_full_conversation") ?? "");
+      } catch {
+        return false;
+      }
+    };
+    const process = (response) => {
+      const previous = perResponse.get(response);
+      if (previous)
+        return previous;
+      const task = (async () => {
+        const originalBody = await nativeText.call(response);
+        const fingerprint = await fingerprintResponseBody(pageWindow, originalBody);
+        const cached = byUrl.get(response.url);
+        if (cached?.fingerprint === fingerprint) {
+          incrementMetric("chatgptLegacyFallbackCacheHits");
+          return cached;
+        }
+        let parsed = JSON.parse(originalBody);
+        let body = originalBody;
+        let stats;
+        try {
+          const result = optimizeConversationPayload(parsed, legacyOptimizerOptions(mode));
+          stats = result.stats;
+          if (result.stats.changed) {
+            parsed = result.payload;
+            body = JSON.stringify(result.payload);
+            incrementMetric("chatgptLegacyFallbackOptimized");
+            const root = pageWindow.document.documentElement;
+            root.dataset.chatgptLegacyFallbackOriginalNodes = String(result.stats.originalNodes);
+            root.dataset.chatgptLegacyFallbackKeptNodes = String(result.stats.keptNodes);
+            root.dataset.chatgptPerformanceFix = "large";
+          }
+        } catch (error) {
+          console.warn(`[${SCRIPT_NAME}] Legacy response fallback failed`, error);
+        }
+        const value = { body, payload: parsed, fingerprint, stats };
+        byUrl.set(response.url, value);
+        while (byUrl.size > 8) {
+          const oldest = byUrl.keys().next().value;
+          if (typeof oldest !== "string")
+            break;
+          byUrl.delete(oldest);
+        }
+        return value;
+      })();
+      perResponse.set(response, task);
+      return task;
+    };
+    const patchedJson = function() {
+      if (!shouldHandle(this))
+        return nativeJson.call(this);
+      return process(this).then((value) => cloneJsonPayload(pageWindow, value.payload, value.body));
+    };
+    const patchedText = function() {
+      if (!shouldHandle(this))
+        return nativeText.call(this);
+      return process(this).then((value) => value.body);
+    };
+    try {
+      Object.defineProperty(patchedJson, "name", { value: "json" });
+      Object.defineProperty(patchedText, "name", { value: "text" });
+      Object.defineProperty(prototype, "json", {
+        configurable: true,
+        writable: true,
+        value: patchedJson
+      });
+      Object.defineProperty(prototype, "text", {
+        configurable: true,
+        writable: true,
+        value: patchedText
+      });
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] Could not install response fallback`, error);
+      return { clear: () => {
+        return;
+      } };
+    }
+    const controller = {
+      clear: () => {
+        byUrl.clear();
+      }
+    };
+    Reflect.set(pageWindow, marker, controller);
+    pageWindow.document.documentElement.dataset.chatgptResponseFallback = "enabled";
+    return controller;
+  }
   async function materializeAndOptimize(pageWindow, response, mode, exposedUrl = response.url) {
-    const originalBody = await response.text();
+    const originalBody = await readResponseText(response);
     let body = originalBody;
     let optimized = false;
     let cacheable = false;
     let stats;
     if (response.ok) {
       try {
-        const parsed = JSON.parse(originalBody);
-        const result = optimizeConversationPayload(parsed, MODE_OPTIONS[mode]);
+        const result = await optimizeLegacyOffMain(pageWindow, originalBody, MODE_OPTIONS[mode]);
         stats = result.stats;
         if (result.stats.changed) {
           body = JSON.stringify(result.payload);
@@ -1326,7 +2080,7 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
     };
   }
   async function materializeAndOptimizePaginated(pageWindow, response, apiKind, mode, exposedUrl, requestWasClamped, createLocalCursor) {
-    const originalBody = await response.text();
+    const originalBody = await readResponseText(response);
     let body = originalBody;
     let optimized = requestWasClamped;
     let stats;
@@ -1335,26 +2089,14 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
     let localPagePayloads = [];
     if (response.ok) {
       try {
-        const parsed = JSON.parse(originalBody);
-        const activeInitial = apiKind === "paginated-initial" && hasActivePaginatedWork(parsed);
-        cacheable = apiKind === "paginated-initial" && isIdlePaginatedConversation(parsed);
-        const result = optimizePaginatedConversationPayload(parsed, {
-          recentFullTurns: apiKind === "paginated-initial" && activeInitial ? MODE_OPTIONS[mode].recentFullTurns : 0,
-          forceKeepMessageIds: apiKind === "paginated-initial" ? requiredInitialMessageIds(parsed) : [],
-          collapseTurnsToQuestionAnswer: apiKind === "paginated-messages" || apiKind === "paginated-initial" && !activeInitial
-        });
+        const result = workerJobToken ? await finishPaginatedWorkerJob(pageWindow, workerJobToken, apiKind, mode) : await optimizePaginatedOffMain(pageWindow, originalBody, apiKind, mode);
         stats = result.stats;
+        cacheable = result.cacheable;
         optimizedPayload = result.payload;
-        if (result.stats.changed) {
+        registerStaticCodeBlocks(pageWindow, result.codeBlocks);
+        if (result.stats.changed || workerJobToken)
           optimized = true;
-        }
-        const messages = Array.isArray(result.payload.messages) ? result.payload.messages : [];
-        const chunksNewestFirst = splitPaginatedMessagesNewestFirst(messages, {
-          maxTurns: MODE_OPTIONS[mode].paginatedRenderTurns,
-          maxMessages: Number.MAX_SAFE_INTEGER,
-          maxBytes: Number.MAX_SAFE_INTEGER,
-          allowSplitTurns: false
-        });
+        const chunksNewestFirst = result.chunks;
         if (chunksNewestFirst.length > 1) {
           const originalPageInfo = result.payload.page_info && typeof result.payload.page_info === "object" ? { ...result.payload.page_info } : { has_previous_page: false, start_cursor: null };
           const localCursors = chunksNewestFirst.slice(1).map(() => createLocalCursor());
@@ -1367,12 +2109,12 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
               start_cursor: localCursors[0]
             }
           };
-          localPagePayloads = chunksNewestFirst.slice(1).map((messages2, index) => {
+          localPagePayloads = chunksNewestFirst.slice(1).map((messages, index) => {
             const hasAnotherLocalPage = index + 1 < localCursors.length;
             return {
               cursor: localCursors[index],
               payload: {
-                messages: messages2,
+                messages,
                 page_info: hasAnotherLocalPage ? {
                   ...originalPageInfo,
                   has_previous_page: true,
@@ -1439,12 +2181,49 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
     const signal = input?.signal;
     return signal != null && typeof signal.aborted === "boolean" ? signal : undefined;
   }
+  async function prepareCompletePaginatedResponse(pageWindow, originalFetch, input, init, rewrittenUrl, apiKind, conversationId) {
+    const [firstInput, firstInit] = rewriteGetRequest(pageWindow, input, init, rewrittenUrl);
+    const firstResponse = await originalFetch(firstInput, firstInit);
+    if (!firstResponse.ok || !ensureJsonWorker(pageWindow)) {
+      return {
+        response: apiKind === "paginated-messages" ? await fetchCompleteHistoryPage(pageWindow, originalFetch, input, init, rewrittenUrl) : await fetchCompleteInitialPage(pageWindow, originalFetch, input, init, rewrittenUrl, conversationId)
+      };
+    }
+    let probe;
+    try {
+      probe = await startPaginatedWorkerJob(pageWindow, await firstResponse.clone().arrayBuffer(), apiKind === "paginated-messages");
+      const seenCursors = new Set;
+      for (let attempt = 0;!probe.complete && attempt < 9; attempt += 1) {
+        const cursor = probe.cursor;
+        if (!cursor || seenCursors.has(cursor))
+          break;
+        seenCursors.add(cursor);
+        const olderUrl = apiKind === "paginated-initial" ? new pageWindow.URL(`/backend-api/conversations/${conversationId}/messages`, rewrittenUrl) : new pageWindow.URL(rewrittenUrl);
+        olderUrl.searchParams.set("before", cursor);
+        olderUrl.searchParams.set("include_has_versions", "true");
+        olderUrl.searchParams.set("num_turns", String(Math.min(512, 2 ** Math.min(9, attempt + 2))));
+        const [olderInput, olderInit] = rewriteGetRequest(pageWindow, input, init, olderUrl.href);
+        const olderResponse = await originalFetch(olderInput, olderInit);
+        if (!olderResponse.ok)
+          break;
+        probe = await prependPaginatedWorkerJob(pageWindow, probe.token, await olderResponse.arrayBuffer());
+      }
+      return { response: firstResponse, workerJobToken: probe.token };
+    } catch (error) {
+      if (probe?.token)
+        await cancelPaginatedWorkerJob(pageWindow, probe.token);
+      console.warn(`[${SCRIPT_NAME}] Worker page assembly fell back`, error);
+      return {
+        response: apiKind === "paginated-messages" ? await fetchCompleteHistoryPage(pageWindow, originalFetch, input, init, rewrittenUrl) : await fetchCompleteInitialPage(pageWindow, originalFetch, input, init, rewrittenUrl, conversationId)
+      };
+    }
+  }
   async function fetchCompleteInitialPage(pageWindow, originalFetch, input, init, rewrittenUrl, conversationId) {
     const [firstInput, firstInit] = rewriteGetRequest(pageWindow, input, init, rewrittenUrl);
     const firstResponse = await originalFetch(firstInput, firstInit);
     if (!firstResponse.ok)
       return firstResponse;
-    let payload = await firstResponse.clone().json();
+    let payload = await responseJsonOffMain(pageWindow, firstResponse.clone());
     const seenCursors = new Set;
     let combined = false;
     for (let attempt = 0;attempt < 9; attempt += 1) {
@@ -1463,7 +2242,7 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
       const olderResponse = await originalFetch(olderInput, olderInit);
       if (!olderResponse.ok)
         break;
-      const olderPayload = await olderResponse.json();
+      const olderPayload = await responseJsonOffMain(pageWindow, olderResponse);
       payload = {
         ...payload,
         messages: mergeChronologicalMessages(Array.isArray(olderPayload.messages) ? olderPayload.messages : [], messages),
@@ -1492,7 +2271,7 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
     const firstResponse = await originalFetch(firstInput, firstInit);
     if (!firstResponse.ok)
       return firstResponse;
-    let payload = await firstResponse.clone().json();
+    let payload = await responseJsonOffMain(pageWindow, firstResponse.clone());
     const seenCursors = new Set;
     let combined = false;
     for (let attempt = 0;attempt < 9; attempt += 1) {
@@ -1510,7 +2289,7 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
       const olderResponse = await originalFetch(olderInput, olderInit);
       if (!olderResponse.ok)
         break;
-      const olderPayload = await olderResponse.json();
+      const olderPayload = await responseJsonOffMain(pageWindow, olderResponse);
       payload = {
         ...payload,
         messages: mergeChronologicalMessages(Array.isArray(olderPayload.messages) ? olderPayload.messages : [], messages),
@@ -1538,61 +2317,14 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
     const lazyUrl = new pageWindow.URL(`/backend-api/conversations/${conversationId}`, legacyUrl);
     lazyUrl.searchParams.set("include_has_versions", "true");
     lazyUrl.searchParams.set("num_turns", String(MODE_OPTIONS[mode].lazyInitialTurns));
-    const [lazyInput, lazyInit] = rewriteGetRequest(pageWindow, input, init, lazyUrl.href);
     try {
-      const nativeResponse = await originalFetch(lazyInput, {
-        ...lazyInit,
-        cache: "no-store"
-      });
+      const prepared = await prepareCompletePaginatedResponse(pageWindow, originalFetch, input, { ...init, cache: "no-store" }, lazyUrl.href, "paginated-initial", conversationId);
+      const nativeResponse = prepared.response;
       if (!nativeResponse.ok) {
         throw new Error(`Native pagination returned HTTP ${nativeResponse.status}`);
       }
-      let nativePayload = await nativeResponse.clone().json();
-      let fetchedOlderPage = false;
-      const seenCursors = new Set;
-      for (let attempt = 0;attempt < 9; attempt += 1) {
-        const collected = Array.isArray(nativePayload.messages) ? nativePayload.messages : [];
-        if (hasRenderableQuestionAnswerTurn(collected, false))
-          break;
-        const cursor = nativePayload.page_info?.has_previous_page === true && typeof nativePayload.page_info.start_cursor === "string" ? nativePayload.page_info.start_cursor : null;
-        if (!cursor)
-          break;
-        if (seenCursors.has(cursor)) {
-          throw new Error("Native pagination cursor did not advance");
-        }
-        seenCursors.add(cursor);
-        const olderUrl = new pageWindow.URL(`/backend-api/conversations/${conversationId}/messages`, legacyUrl);
-        olderUrl.searchParams.set("before", cursor);
-        olderUrl.searchParams.set("include_has_versions", "true");
-        olderUrl.searchParams.set("num_turns", String(Math.min(512, 2 ** Math.min(9, attempt + 2))));
-        const [olderInput, olderInit] = rewriteGetRequest(pageWindow, input, init, olderUrl.href);
-        const olderResponse = await originalFetch(olderInput, {
-          ...olderInit,
-          cache: "no-store"
-        });
-        if (!olderResponse.ok) {
-          throw new Error(`Native history pagination returned HTTP ${olderResponse.status}`);
-        }
-        const olderPayload = await olderResponse.json();
-        nativePayload = {
-          ...nativePayload,
-          messages: mergeChronologicalMessages(Array.isArray(olderPayload.messages) ? olderPayload.messages : [], collected),
-          page_info: olderPayload.page_info,
-          safe_urls: olderPayload.safe_urls ?? nativePayload.safe_urls ?? [],
-          blocked_urls: olderPayload.blocked_urls ?? nativePayload.blocked_urls ?? []
-        };
-        fetchedOlderPage = true;
-      }
-      if (!Array.isArray(nativePayload.messages) || nativePayload.messages.length === 0) {
-        throw new Error("Native pagination returned no messages");
-      }
-      const preparedNativeResponse = fetchedOlderPage ? new pageWindow.Response(JSON.stringify(nativePayload), {
-        status: nativeResponse.status,
-        statusText: nativeResponse.statusText,
-        headers: nativeResponse.headers
-      }) : nativeResponse;
-      const nativeMaterialized = await materializeAndOptimizePaginated(pageWindow, preparedNativeResponse, "paginated-initial", mode, legacyUrl, true, createLocalCursor);
-      const optimizedNativePayload = JSON.parse(nativeMaterialized.body);
+      const nativeMaterialized = await materializeAndOptimizePaginated(pageWindow, nativeResponse, "paginated-initial", mode, legacyUrl, true, createLocalCursor, prepared.workerJobToken);
+      const optimizedNativePayload = await parseJsonOffMain(pageWindow, nativeMaterialized.body);
       const lazyPayload = convertNativeInitialToLazyConversation(optimizedNativePayload, conversationId, MODE_OPTIONS[mode].paginatedMaxTurns);
       if (!lazyPayload) {
         throw new Error("Native pagination response could not form a lazy conversation");
@@ -1649,13 +2381,14 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
     }
     addVirtualizationCss(pageWindow);
     if (settings.mode !== "off") {
-      installRichTextPerformanceFix(pageWindow, MODE_OPTIONS[settings.mode].richTextWarmDistancePx);
+      installRichTextPerformanceFix(pageWindow, MODE_OPTIONS[settings.mode].richTextWarmDistancePx, MODE_OPTIONS[settings.mode].codeEditorWarmDistancePx);
     }
     const deepLink = new pageWindow.URLSearchParams(pageWindow.location.search);
     if (settings.mode === "off" || bypassThisPageLoad || deepLink.has("message") || deepLink.has("messageId")) {
       return;
     }
     const activeMode = settings.mode;
+    const responseFallback = installLegacyResponseFallback(pageWindow, activeMode);
     installManualPaginationObserver(pageWindow);
     const originalFetch = pageWindow.fetch.bind(pageWindow);
     const cache = new Map;
@@ -1669,6 +2402,7 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
       cache.clear();
       inFlight.clear();
       localPages.clear();
+      responseFallback.clear();
     };
     const wrappedFetch = async (input, init) => {
       const rawUrl = requestUrl(pageWindow, input, pageWindow.location.href);
@@ -1676,7 +2410,7 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
       const apiMatch = matchConversationApiUrl(rawUrl, pageWindow.location.href);
       if (isConversationMutation(rawUrl, method, pageWindow.location.href)) {
         clearConversationCache();
-        return originalFetch(input, init);
+        return originalFetch(input, restoreStaticCodeRequestInit(init));
       }
       if (method !== "GET" || !apiMatch) {
         return originalFetch(input, init);
@@ -1725,10 +2459,22 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
         const requestWasClamped = rewrittenUrl !== normalizedRawUrl;
         const [rewrittenInput, rewrittenInit] = rewriteGetRequest(pageWindow, input, init, rewrittenUrl);
         key = `paginated:${rewrittenUrl}`;
+        if (apiMatch.kind === "paginated-messages") {
+          const cached = cache.get(key);
+          if (cached && cached.expiresAt > Date.now()) {
+            const root = pageWindow.document.documentElement;
+            const hits = Number(root.dataset.chatgptHistoryCacheHits ?? "0");
+            root.dataset.chatgptHistoryCacheHits = String(hits + 1);
+            await yieldUntilInteractionIdle(pageWindow);
+            return cloneMaterializedResponse(pageWindow, cached.response);
+          }
+          if (cached)
+            cache.delete(key);
+        }
         task = inFlight.get(key);
         if (!task) {
-          const responseTask = apiMatch.kind === "paginated-messages" ? fetchCompleteHistoryPage(pageWindow, originalFetch, input, init, rewrittenUrl) : fetchCompleteInitialPage(pageWindow, originalFetch, input, init, rewrittenUrl, apiMatch.conversationId);
-          task = responseTask.then((response) => materializeAndOptimizePaginated(pageWindow, response, apiMatch.kind, activeMode, normalizedRawUrl, requestWasClamped, createLocalCursor));
+          const responseTask = prepareCompletePaginatedResponse(pageWindow, originalFetch, input, init, rewrittenUrl, apiMatch.kind, apiMatch.conversationId);
+          task = responseTask.then((prepared) => materializeAndOptimizePaginated(pageWindow, prepared.response, apiMatch.kind, activeMode, normalizedRawUrl, requestWasClamped, createLocalCursor, prepared.workerJobToken));
           inFlight.set(key, task);
         }
       }
@@ -1742,6 +2488,12 @@ html [class*="_codemirror"][data-chatgpt-rich-editor-state="cold"] {
           if (typeof oldest !== "string")
             break;
           localPages.delete(oldest);
+        }
+        if (materialized.apiKind === "paginated-messages" && materialized.optimized) {
+          cache.set(key, {
+            expiresAt: Date.now() + HISTORY_CACHE_TTL_MS,
+            response: materialized
+          });
         }
         if ((materialized.apiKind === "legacy-full" || materialized.lazyInitial) && materialized.optimized && materialized.cacheable) {
           cache.set(key, {

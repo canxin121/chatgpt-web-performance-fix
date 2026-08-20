@@ -1,0 +1,44 @@
+{
+  "allChecksPassed": false,
+  "checks": {
+    "noLegacyFullLoad": true,
+    "initialHasUserAndAssistant": true,
+    "historyHasUserAndFinalAssistant": true,
+    "historyIsManual": true,
+    "interactionRunsBeforeHistoryCommit": true,
+    "largeJsonUsesWorker": false,
+    "sidebarScrollDoesNotScanConversation": false,
+    "historyCursorCacheWorks": false,
+    "heavyCodeUsesStaticRenderer": false
+  },
+  "evidence": {
+    "legacyFullGetsBeforeMutation": 0,
+    "lazyInitialVisibleRoles": [
+      "user",
+      "assistant"
+    ],
+    "nativeOlderRoles": [
+      "user",
+      "assistant"
+    ],
+    "nativeOlderAnswerChannel": "final",
+    "historyButtonExists": true,
+    "paginationCallsAfterUserScroll": 0,
+    "paginationCallsAfterManualClick": 1,
+    "userTaskRanBeforeLocalHistory": true,
+    "optimizerWorkerUsed": null,
+    "jsonWorkerParses": null,
+    "sidebarScrollTriggeredRichGeometry": null,
+    "historyCacheHits": null,
+    "richHistoryHasStaticMarkers": null,
+    "richHistoryFenceCount": null,
+    "staticCodeHydrated": null,
+    "staticCodeReady": null,
+    "staticCodeNoCodeMirror": null,
+    "staticCodeHeightStable": null,
+    "richMessageContentVisibility": "visible",
+    "richSmoothedVisible": true,
+    "richOverlayHidden": true,
+    "skippedRichResizeObservers": 36
+  }
+}

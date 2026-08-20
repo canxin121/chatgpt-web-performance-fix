@@ -1,0 +1,694 @@
+{
+  "summary": {
+    "traceDurationMs": 487315784.925,
+    "maxMainThreadTaskMs": 24853.295,
+    "longTaskCount": 157,
+    "conversationInitialRequests": 0,
+    "conversationHistoryRequests": 0,
+    "legacyFullRequests": 17
+  },
+  "findings": [
+    {
+      "id": "main-thread-freeze",
+      "severity": "critical",
+      "evidence": {
+        "maxTaskMs": 24853.295,
+        "longTaskCount": 157,
+        "longTaskTotalMs": 53509.415
+      },
+      "summary": "The freezes are main-thread stalls, so unrelated UI such as the sidebar cannot respond while they run."
+    },
+    {
+      "id": "layout-paint-pressure",
+      "severity": "high",
+      "evidence": {
+        "layoutCoreInclusiveMs": 46509.875,
+        "layoutPaintInclusiveMs": 47515.267
+      },
+      "summary": "Style, layout, pre-paint, and paint form a material part of the blocked windows."
+    },
+    {
+      "id": "script-pressure",
+      "severity": "high",
+      "evidence": {
+        "scriptInclusiveMs": 92270.425,
+        "topScripts": [
+          {
+            "source": "2340486e-i20axdnmh5jcl165.js",
+            "inclusiveMs": 30489.36
+          },
+          {
+            "source": "chrome-extension://:extension",
+            "inclusiveMs": 2310.445
+          },
+          {
+            "source": "bcae0416-j0wb7gki96xrx9sq.js",
+            "inclusiveMs": 1873.057
+          },
+          {
+            "source": "8b34dbc2-h9xyg2koz689ttr1.js",
+            "inclusiveMs": 60.803
+          },
+          {
+            "source": "4813494d-l3iadyutom9ijssn.js",
+            "inclusiveMs": 6.944
+          },
+          {
+            "source": "0631b696-glw2xi0e51thcgtf.js",
+            "inclusiveMs": 1.179
+          },
+          {
+            "source": "https://chatgpt.com/c/:id",
+            "inclusiveMs": 0.384
+          },
+          {
+            "source": "conversation-small-k3kcucfbrrlc8z48.js",
+            "inclusiveMs": 0.338
+          },
+          {
+            "source": "https://chatgpt.com/g/:id/c/:id",
+            "inclusiveMs": 0.169
+          },
+          {
+            "source": "70025534-m8tlqo1dyi0mkzus.js",
+            "inclusiveMs": 0.008
+          },
+          {
+            "source": "LoadTimes",
+            "inclusiveMs": 0.001
+          },
+          {
+            "source": "f025431a-ehagpvg3m4e1cduv.js",
+            "inclusiveMs": 0.001
+          }
+        ]
+      },
+      "summary": "JavaScript execution is a major contributor, not just network latency."
+    },
+    {
+      "id": "gc-pressure",
+      "severity": "medium",
+      "evidence": {
+        "gcInclusiveMs": 15299.899
+      },
+      "summary": "Garbage collection adds visible pauses and suggests large temporary allocations."
+    },
+    {
+      "id": "legacy-full-request",
+      "severity": "high",
+      "evidence": {
+        "count": 17,
+        "maxBodyBytes": 9178663
+      },
+      "summary": "The capture still contains legacy full-conversation traffic."
+    }
+  ],
+  "recommendedChanges": [
+    {
+      "id": "remove-global-scroll-geometry-scan",
+      "reason": "The current rich-text warmer listens to every captured scroll, including sidebar scrolling, and reads all cold-node geometry."
+    },
+    {
+      "id": "use-browser-managed-richtext-observation",
+      "reason": "Use IntersectionObserver and idle queues instead of getBoundingClientRect loops on scroll."
+    },
+    {
+      "id": "offload-large-json-work",
+      "reason": "Parse, merge, filter, and stringify paginated payloads in a Worker so the sidebar remains responsive."
+    },
+    {
+      "id": "bound-cursor-completion",
+      "reason": "Reuse completed semantic-turn pages and avoid repeated exponential cursor probes for one manual click."
+    },
+    {
+      "id": "instrument-fix-overhead",
+      "reason": "Add diagnostics for optimizer worker time, main-thread handoff, mutation scans, and rich-block activations."
+    }
+  ],
+  "worstLongTasks": [
+    {
+      "startMs": 487232311.226,
+      "durationMs": 24853.295,
+      "layoutPaintInclusiveMs": 21110.244,
+      "scriptInclusiveMs": 47132.196,
+      "gcInclusiveMs": 588.483,
+      "inputs": [
+        "blur",
+        "focusout",
+        "DOMFocusOut",
+        "focus",
+        "focusin",
+        "DOMFocusIn"
+      ],
+      "topEvents": [
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 24853.235
+        },
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 22277.96
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 22277.221
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 20747.218
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 363.026
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 294.47
+        },
+        {
+          "name": "CppGC.IncrementalSweep",
+          "inclusiveMs": 83.152
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 74.966
+        },
+        {
+          "name": "V8.HandleInterrupts",
+          "inclusiveMs": 69.275
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 68.356
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 22200.83
+        },
+        {
+          "source": "8b34dbc2-h9xyg2koz689ttr1.js",
+          "inclusiveMs": 60.803
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 13.625
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 1.832
+        },
+        {
+          "source": "https://chatgpt.com/c/:id",
+          "inclusiveMs": 0.384
+        }
+      ]
+    },
+    {
+      "startMs": 487279612.78,
+      "durationMs": 6395.86,
+      "layoutPaintInclusiveMs": 5996.051,
+      "scriptInclusiveMs": 6497.605,
+      "gcInclusiveMs": 38.115,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 6497.506
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 6393.994
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 5944.089
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 103.442
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 101.583
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 51.962
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 32.536
+        },
+        {
+          "name": "CppGC.IncrementalSweep",
+          "inclusiveMs": 28.01
+        },
+        {
+          "name": "MinorGC",
+          "inclusiveMs": 7.483
+        },
+        {
+          "name": "V8.GCScavenger",
+          "inclusiveMs": 7.357
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 6292.432
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 98.507
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.179
+        },
+        {
+          "source": "https://chatgpt.com/g/:id/c/:id",
+          "inclusiveMs": 0.169
+        }
+      ]
+    },
+    {
+      "startMs": 487275839.11,
+      "durationMs": 2829.259,
+      "layoutPaintInclusiveMs": 77.518,
+      "scriptInclusiveMs": 3137.325,
+      "gcInclusiveMs": 153.413,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 2829.209
+        },
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 308.136
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 308.116
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 79.088
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 76.836
+        },
+        {
+          "name": "MinorGC",
+          "inclusiveMs": 31.064
+        },
+        {
+          "name": "V8.GCScavenger",
+          "inclusiveMs": 29.797
+        },
+        {
+          "name": "V8.GC_SCAVENGER",
+          "inclusiveMs": 29.186
+        },
+        {
+          "name": "V8.GC_SCAVENGER_SCAVENGE",
+          "inclusiveMs": 28.818
+        },
+        {
+          "name": "V8.GC_SCAVENGER_SCAVENGE_PARALLEL_PHASE",
+          "inclusiveMs": 15.536
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 229.116
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 78.809
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.105
+        }
+      ]
+    },
+    {
+      "startMs": 487257165.044,
+      "durationMs": 699.65,
+      "layoutPaintInclusiveMs": 424.997,
+      "scriptInclusiveMs": 1746.419,
+      "gcInclusiveMs": 11.143,
+      "inputs": [
+        "pointerout",
+        "pointerover",
+        "mouseout",
+        "mouseover",
+        "mouseenter",
+        "pointermove",
+        "mousemove",
+        "pointerdown"
+      ],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 1278.077
+        },
+        {
+          "name": "WidgetBaseInputHandler::OnHandleInputEvent",
+          "inclusiveMs": 698.683
+        },
+        {
+          "name": "WebFrameWidgetImpl::HandleInputEvent",
+          "inclusiveMs": 696.996
+        },
+        {
+          "name": "EventDispatch",
+          "inclusiveMs": 691.28
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 555.442
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 499.697
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 394.286
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 156.606
+        },
+        {
+          "name": "PrePaint",
+          "inclusiveMs": 12.961
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 8.886
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 350.168
+        },
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 143.956
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 4.083
+        },
+        {
+          "source": "0631b696-glw2xi0e51thcgtf.js",
+          "inclusiveMs": 1.152
+        },
+        {
+          "source": "conversation-small-k3kcucfbrrlc8z48.js",
+          "inclusiveMs": 0.338
+        }
+      ]
+    },
+    {
+      "startMs": 487270329.957,
+      "durationMs": 673.128,
+      "layoutPaintInclusiveMs": 662.457,
+      "scriptInclusiveMs": 1011.817,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 1011.933
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 672.758
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 339.059
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 338.981
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 332.428
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 331.243
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 330.029
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskScheduled",
+          "inclusiveMs": 0.043
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskCanceled",
+          "inclusiveMs": 0.023
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.012
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 337.864
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 333.92
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.658
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.067
+        }
+      ]
+    },
+    {
+      "startMs": 487278891.376,
+      "durationMs": 624.924,
+      "layoutPaintInclusiveMs": 616.555,
+      "scriptInclusiveMs": 938.135,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 938.228
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 624.643
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 313.492
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 313.431
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 310.186
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 308.897
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 306.369
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskScheduled",
+          "inclusiveMs": 0.038
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.032
+        },
+        {
+          "name": "V8.HandleInterrupts",
+          "inclusiveMs": 0.031
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 312.826
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 311.311
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.282
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.043
+        }
+      ]
+    },
+    {
+      "startMs": 487274257.977,
+      "durationMs": 620.328,
+      "layoutPaintInclusiveMs": 611.951,
+      "scriptInclusiveMs": 931.905,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 931.996
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 620.033
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 311.872
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 311.81
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 307.575
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 306.427
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 304.376
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskScheduled",
+          "inclusiveMs": 0.042
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskCanceled",
+          "inclusiveMs": 0.029
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.013
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 310.946
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 308.323
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.523
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.05
+        }
+      ]
+    },
+    {
+      "startMs": 487274914.176,
+      "durationMs": 620.24,
+      "layoutPaintInclusiveMs": 611.378,
+      "scriptInclusiveMs": 933.012,
+      "gcInclusiveMs": 0.0,
+      "inputs": [],
+      "topEvents": [
+        {
+          "name": "v8.callFunction",
+          "inclusiveMs": 933.11
+        },
+        {
+          "name": "FunctionCall",
+          "inclusiveMs": 619.949
+        },
+        {
+          "name": "RunMicrotasks",
+          "inclusiveMs": 313.063
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskRun",
+          "inclusiveMs": 313.004
+        },
+        {
+          "name": "Layout",
+          "inclusiveMs": 308.201
+        },
+        {
+          "name": "LocalFrameView::performLayout",
+          "inclusiveMs": 306.903
+        },
+        {
+          "name": "UpdateLayoutTree",
+          "inclusiveMs": 303.177
+        },
+        {
+          "name": "V8.StackGuard",
+          "inclusiveMs": 0.077
+        },
+        {
+          "name": "V8.HandleInterrupts",
+          "inclusiveMs": 0.075
+        },
+        {
+          "name": "v8::Debugger::AsyncTaskScheduled",
+          "inclusiveMs": 0.037
+        }
+      ],
+      "topScripts": [
+        {
+          "source": "chrome-extension://:extension",
+          "inclusiveMs": 312.153
+        },
+        {
+          "source": "bcae0416-j0wb7gki96xrx9sq.js",
+          "inclusiveMs": 307.049
+        },
+        {
+          "source": "2340486e-i20axdnmh5jcl165.js",
+          "inclusiveMs": 0.497
+        },
+        {
+          "source": "4813494d-l3iadyutom9ijssn.js",
+          "inclusiveMs": 0.047
+        }
+      ]
+    }
+  ]
+}

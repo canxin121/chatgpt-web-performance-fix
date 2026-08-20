@@ -1,0 +1,99 @@
+{
+  "matchedAssets": [
+    {
+      "asset": "18e7d84e-g1cfv86sv38v0kma.js",
+      "bytes": 47391,
+      "signals": [
+        "codeBlock"
+      ]
+    },
+    {
+      "asset": "9d85046f-iwnwjmjdd10myu5q.js",
+      "bytes": 10090,
+      "signals": [
+        "codeBlock"
+      ]
+    },
+    {
+      "asset": "e4c59151-d19m45xthtp92hyi.js",
+      "bytes": 7400,
+      "signals": [
+        "codeBlock"
+      ]
+    },
+    {
+      "asset": "bcae0416-j0wb7gki96xrx9sq.js",
+      "bytes": 224998,
+      "signals": [
+        "codeMirror"
+      ]
+    },
+    {
+      "asset": "8b34dbc2-h9xyg2koz689ttr1.js",
+      "bytes": 3376411,
+      "signals": [
+        "conversationPagination",
+        "flushSyncPrepend"
+      ]
+    },
+    {
+      "asset": "2340486e-i20axdnmh5jcl165.js",
+      "bytes": 756598,
+      "signals": [
+        "flushSyncPrepend"
+      ]
+    },
+    {
+      "asset": "31e01dd8-e4mo3w97mirlzg6d.js",
+      "bytes": 251354,
+      "signals": [
+        "flushSyncPrepend"
+      ]
+    },
+    {
+      "asset": "44fdb285-dj3wwgto71bld6e2.js",
+      "bytes": 71811,
+      "signals": [
+        "flushSyncPrepend"
+      ]
+    },
+    {
+      "asset": "85557f11-fy7wvpufmszqdkfa.js",
+      "bytes": 18325,
+      "signals": [
+        "flushSyncPrepend"
+      ]
+    },
+    {
+      "asset": "85557f11-kgx78dgoawnybre7.js",
+      "bytes": 12454,
+      "signals": [
+        "flushSyncPrepend"
+      ]
+    },
+    {
+      "asset": "2afb55f3-lmq4g146c1t83qq8.js",
+      "bytes": 588191,
+      "signals": [
+        "smoothedMarkdown"
+      ]
+    },
+    {
+      "asset": "conversation-small-k3kcucfbrrlc8z48.js",
+      "bytes": 4565835,
+      "signals": [
+        "smoothedMarkdown",
+        "conversationPagination",
+        "flushSyncPrepend"
+      ]
+    },
+    {
+      "asset": "4813494d-l3iadyutom9ijssn.js",
+      "bytes": 2115506,
+      "signals": [
+        "smoothedMarkdown",
+        "flushSyncPrepend"
+      ]
+    }
+  ]
+}

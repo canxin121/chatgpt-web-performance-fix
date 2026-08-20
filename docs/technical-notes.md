@@ -33,7 +33,19 @@
 
 这正好解释了用户观察到的现象：网络可能很快，但每次旧消息出现之前主线程会停顿数秒；页面不是边滚动边自然出现内容，而是在接近顶端后执行一次大规模同步提交。
 
-版本 0.1.0 保留真正会话懒加载，并进一步绕过“先拿全量再压缩”这条路径：当页面准备请求旧版 `/conversation/{id}` 时，脚本优先改道到 ChatGPT 自己的原生分页 `/conversations/{id}?num_turns=2`，把返回值转换成前端原生分页状态。因此正常支持分页的会话首次打开只取最新一个回合，更早历史保留 cursor，但只有用户点击“加载更早的一问一答”后才请求。
+版本 0.1.0 保留真正会话懒加载，并进一步绕过“先拿全量再压缩”这条路径：当页面准备请求旧版 `/conversation/{id}` 时，脚本优先改道到 ChatGPT 自己的原生分页 `/conversations/{id}?num_turns=2`，把返回值转换成前端原生分页状态。因此正常支持分页的会话首次打开只取最新一个回合，更早历史保留 cursor，但只有用户点击“加载更多”后才请求。
+
+### 后续 WACZ + Chrome Trace 复核
+
+第二组独立抓包进一步确认了卡死的真实传播链：
+
+- 五分钟 WACZ 中，主会话旧版全量接口被请求 **15 次**，每次解码约 **9.16 MB / 4000 个 mapping 节点**，累计解码约 **131 MB**；多次响应内容完全相同。
+- Chrome Trace 中，两次完整全量请求分别耗时约 **6.2 秒**和 **7.3 秒**。第一次响应结束后约 **22 ms** 就进入一次 **24.85 秒**的 renderer 主线程任务。
+- 最重调用落在 React reconciler / commit 主循环；另一次 **6.4 秒**任务落在 React scheduler。侧边栏和消息区共享同一个 renderer 主线程，所以消息提交会让整个界面一起冻结。
+- Trace 中 `UpdateLayoutTree` 累计约 **39.5 秒**、`Layout` 约 **5.76 秒**。CodeMirror 相关函数在最重任务样本中可归因约 **9.8 秒**。
+- Adobe Acrobat 浏览器扩展也向 ChatGPT 注入了脚本，在最重任务样本中可归因约 **5.6 秒**，多次读取分享按钮位置并强制布局。该部分不属于页面脚本可安全控制的范围。
+
+这组证据还说明仅包装 `window.fetch` 不够：ChatGPT 可能在用户脚本完成安装前保存原生 fetch 引用，后续请求绕过包装。0.1.0 因而增加第二道 `Response.prototype.json/text` 兜底；即使网络请求绕过 `window.fetch`，完整会话在进入 React 前仍会被压缩。
 
 ## 录制文件概况
 
@@ -232,11 +244,12 @@ SmoothedCodeBlock > ClipText > span.block
 0.1.0 在 React DOM commit 后通过 `MutationObserver` 捕获代码块、CodeMirror、table、KaTeX 和 preview pane，并用统一的 `requestAnimationFrame` 距离扫描主动预热：
 
 - 新重型节点先标记 `cold`，使用 `content-visibility:auto` 和类型相关 intrinsic size，保留可观察几何但允许浏览器跳过远端内容。
-- 平衡模式的主动预热距离为 **8000px**。每个滚动/resize 帧最多进行一次几何扫描；只要节点进入视口上下 8000px，就加入预热队列。
+- 普通富文本块的主动预热距离保持 **8000px**；CodeMirror 根据新 Trace 的布局开销单独收紧到 **3000px**。
 - 已经在真实视野中的节点立即切成 `hot`；视野外节点按离视口的距离排序。
 - 每个 animation frame 最多切换 **3 个普通富文本块 + 1 个 CodeMirror**，避免一次性物化几十个重型节点。
+- 冷态 CodeMirror 不再启动自身的 `IntersectionObserver` 和 `ResizeObserver`。只有容器进入 3000px 预热范围并切成 `hot` 后，这两个原生观察器才各恢复一次。
 - `hot` 节点使用 `content-visibility:visible` 并保持 hot，不会滚出再滚回时重新从 intrinsic 占位切换成真实内容。
-- 这层不能阻止 React effect 创建 CodeMirror 的 JS `EditorState`；它针对的是昂贵的 DOM 物化、测量、布局和 paint 峰值。Chrome 验证中，顶部 2200px 外的 CodeMirror 在进入视野前已经 hot，而 12000px 外仍保持 cold。
+- 这层不能阻止 React effect 创建 CodeMirror 的 JS `EditorState`；它针对的是新 Trace 中最明显的重复几何测量、布局和 paint 峰值。
 
 #### 5. 富文本子块级虚拟化
 
@@ -248,7 +261,7 @@ SmoothedCodeBlock > ClipText > span.block
 - KaTeX display math
 - `data-code-block-preview-pane`
 
-因此即使消息本身处于视口附近，远端重型子块也可以先保持 cold；接近 8000px 预热区后在视野外逐帧物化，真正滚入视野时已经是稳定的真实内容。
+因此普通富文本块可在 8000px 外逐帧物化；CodeMirror 则只在 3000px 内恢复自己的可见性和尺寸观察，减少不必要的提前布局。
 
 ### 首次打开真正懒加载
 
@@ -292,15 +305,17 @@ Chrome 页面级测试同时确认，在原生分页可用时，页面虽然调�
 
 ### 旧版全量响应压缩仅作为兼容兜底
 
-平衡模式：
+旧版全量兜底采用更严格的紧急压缩：
 
-1. 从 `current_node` 沿 `parent` 追踪当前活动分支。
-2. 移除全部非活动分支节点。
-3. 完整保留最新一个用户回合，包括其工具调用和工具结果。
-4. 更早回合保留用户、系统、开发者和助手可见内容。
-5. 移除历史 `assistant/code`、`tool/*`、`assistant/thoughts`、视觉隐藏消息等内部轨迹。
-6. 按保留顺序重建合法的 `parent` 和 `children`。
-7. 保持原始 `current_node`，并过滤指向已移除消息的 moderation 记录。
+1. 从 `current_node` 沿 `parent` 追踪当前活动分支，并移除全部非活动分支。
+2. 每个历史回合只保留用户消息和对应的 AI 回复。
+3. 当前未完成回合只保留最后一条可见回复、`current_node` 和它的直接父节点，避免把数百个工具调用一起提交给 React。
+4. 移除历史 `assistant/code`、`tool/*`、`assistant/thoughts` 和视觉隐藏消息。
+5. 按保留顺序重建合法 `parent` / `children`，保持原始 `current_node`。
+6. 对完全相同的重复响应计算指纹并复用已经优化的结果，避免再次 JSON.parse 和树压缩。
+7. 该兜底同时安装在 `Response.prototype.json/text`，不依赖请求一定经过已包装的 `window.fetch`。
+
+旧压力样本从 5405 节点压到 **35 节点**；新 Trace 对应的 4011 节点样本压到 **39 节点 / 574 KiB**，保留 current_node 及直接父节点。
 
 若原生初始页为空或只包含 turn 碎片但仍给出 cursor，脚本会沿 `/conversations/{id}/messages` 最多继续 9 次，检测 cursor 是否前进，并按 4/8/16/... 逐步扩大窗口；只有确认同一 turn 同时包含 user 与可见 assistant 后才构造首屏。只有原生分页接口返回错误、cursor 无法前进、响应结构无法转换，或用户显式选择“完整加载当前会话一次”时，才会回退旧路径。服务器原始会话完全不变，压缩只影响本次浏览器收到的副本。
 
@@ -410,7 +425,7 @@ paint
 
 - 同一首次 URL 的并发请求共用一个 Promise，因此多个旧版 loader 不会重复触发原生初始页网络请求。
 - 合成的 lazy 初始页故意不做 20 秒缓存：服务器可能在一个已完成工具结果之后很快追加最终助手消息，长缓存会隐藏这一过渡。后续顺序读取即使再次联网，也只会请求最新 1 个回合。
-- 旧版兼容兜底仅在当前叶节点明确完成且 `async_status` 为空时缓存 20 秒；异步会话只合并并发请求，不缓存连续请求。
+- 请求层旧版缓存仍只用于明确空闲状态；Response 兜底则按完整响应指纹复用优化结果，内容变化时自动重新处理。
 - 会话写请求会清空旧版缓存、本地微页和正在进行的去重状态。
 - 重建 Response 时保留 status、headers、`url`、`redirected` 和 `type`。
 
@@ -453,9 +468,11 @@ paint
 | 首次旧版 `mapping` | 5,405 | **不构建** |
 | 首次懒加载消息 | 全历史 | 6 条最新消息 |
 | 首次懒加载 mapping | 5,405 | 7 |
-| 旧版兜底 `mapping` | 5,405 | 137 |
+| 旧版兜底 `mapping` | 5,405 | 35 |
 | 非活动节点移除 |  | 1,685 |
 | 历史内部节点移除 |  | 3,583 |
+| 新 Trace 兜底 `mapping` | 4,011 | 39 |
+| 新 Trace 兜底 JSON | 9.18 MB | 574 KiB |
 | 最重历史分页消息 | 773 | 2 |
 | 最重历史分页字节 | 1,399,888 | 20,444 |
 
@@ -513,6 +530,12 @@ analysis/output/richtext-analysis.json
   "normalVisibilityState": "visible",
   "smoothedVisibilityState": "hidden",
   "smoothedMarkdownBypass": "enabled",
+  "fallbackResponseHook": "enabled",
+  "fallbackFirstNodes": 35,
+  "fallbackSecondNodes": 35,
+  "fallbackCacheHits": 2,
+  "fallbackOriginalNodes": 5405,
+  "fallbackKeptNodes": 35,
   "firstNodes": 5,
   "lazyInitialVisibleRoles": ["user", "assistant"],
   "nativeInitialVisibleRoles": ["user", "assistant"],
@@ -544,6 +567,11 @@ analysis/output/richtext-analysis.json
   "richPrewarmEditorTop": 2200,
   "richColdEditorState": "cold",
   "richTextWarmDistancePx": 8000,
+  "codeEditorWarmDistancePx": 3000,
+  "codeMirrorIoStayedDeferred": true,
+  "codeMirrorIoResumedOnce": true,
+  "codeMirrorRoStayedDeferred": true,
+  "codeMirrorRoResumedOnce": true,
   "currentNodePreserved": true,
   "responseUrlPreserved": true
 }
@@ -554,11 +582,11 @@ analysis/output/richtext-analysis.json
 - 普通页面读取 `document.visibilityState` 仍为 `visible`，而从 SmoothedMarkdown 同模块前缀发起的读取为 `hidden`，证明 16ms smoothing bypass 没有全局伪造页面可见性。
 - 模拟旧 CSS 的 `height:0;opacity:0` 代码块被直接展开，ClipText 非零高度，SmoothingOverlay 被隐藏，不再出现“薄横条等待”。
 - 按录制中最重的 36 代码块规模创建平滑 `ResizeObserver`：原生 observe 计数在这 36 次后仍为 0；对普通元素 observe 后变成 1，证明 wrapper 只过滤目标代码块测量。
-- 富文本不再等“进入视野”才物化：2200px 外的 CodeMirror 已经 hot；12000px 外仍 cold。平衡模式 warm distance=8000px，37 个测试富文本块最终全部在视野外预热完成并保持 visible。
+- 普通富文本块预热距离为 8000px，CodeMirror 单独收紧到 3000px；冷态 CodeMirror 的 IO/RO 原生 observe 均保持不变，切 hot 后才各增加一次。
 - 页面发起旧版 URL 时成功改道到原生初始分页，旧版全量 GET 为 0。
 - 首次接口被故意切成回合末尾碎片后，脚本仍补齐到可见 `[user, assistant]`；录制样本最终 mapping 5 节点，其中 2 个不可见节点只为保留 current tool state。
 - 首次传输窗口从 `num_turns=2` 开始；若仍只是 turn 碎片，会沿 cursor 补齐当前回合。合成初始页仍不长缓存，避免遮住服务器随后补出的 final。
-- 原生分页不可用的测试路径仍会回退旧版 5,405 → 137，兼容兜底没有回归。
+- 即使调用脚本注入前保存的原生 fetch，`Response.json()` / `Response.text()` 兜底仍将 5,405 节点压到 35；三次真实网络响应只优化一次，后两次命中指纹缓存。
 - 跨 Realm `Request` URL 重写正确。
 - 首次和历史网络都从 `num_turns=2` 起步；碎片压力测试会继续用 4 等更大窗口补齐同一回合，而不是把单条碎片交付 UI。
 - 历史完成回合会压缩成严格 `[user, assistant]` 两条，assistant 优先为 `channel=final`；真实 565 消息页和 773 消息页都通过该断言。
@@ -588,7 +616,8 @@ analysis/output/benchmark.json             全量基准
 analysis/output/pagination-analysis.json   分页压缩指标
 analysis/output/richtext-analysis.json     富文本/代码块分析指标
 analysis/output/browser-harness.json       Chrome 联调结果
-analysis/output/duplicate-requests.json    重复请求哈希证据
+analysis/output/duplicate-requests.json    重复请求聚合证据
+analysis/analyze-chrome-trace.py            流式 Chrome Trace 分析器
 ```
 
 ## 已知边界
@@ -597,6 +626,7 @@ analysis/output/duplicate-requests.json    重复请求哈希证据
 - 历史工具调用详情和非活动分支默认不进入浏览器副本，可用“完整加载当前会话一次”查看。
 - Chrome 联调覆盖数据、网络、cursor 和调度时序，但没有使用用户真实生产登录态进行自动滚动，避免触碰私密会话；真实流畅度仍受具体消息正文、扩展、硬件和后续 ChatGPT 构建影响。
 - ChatGPT 是持续更新的闭源应用。接口或 DOM 标记变化时，脚本会尽量失败关闭；仍需通过新的 WACZ 或浏览器 Profile 持续回归。
+- 浏览器扩展与 ChatGPT 共用 renderer 主线程。新 Trace 中 Adobe Acrobat 扩展造成约 5.6 秒可归因工作和多次强制布局；脚本无法安全修改其他扩展的隔离世界，建议对 `chatgpt.com` 禁用此类 PDF/网页解析扩展后再比较。
 
 ## 隐私说明
 
@@ -607,3 +637,26 @@ WACZ 含有页面正文、接口响应及可能的认证信息。所有分析和
 .private/wacz/
 .private/extracted/
 ```
+
+## 新抓包中的主线程问题
+
+新的网络抓包和 Chrome Performance Trace 说明，偶发卡顿并不只是网络慢：当页面线程执行大 JSON 解析、历史回合合并、富文本 DOM 测量或代码编辑器初始化时，侧边栏、输入和滚动都会一起停止响应。
+
+这轮修复包括：
+
+- 分页响应以 transferable `ArrayBuffer` 转移到 Worker；JSON 解码、cursor 片段合并、回合压缩和分块均在 Worker 内完成，主线程只接收最终的小型结果，减少临时字符串/对象和 GC。
+- 历史 cursor 页面增加短期缓存，避免前端重试时重复下载和处理。
+- 移除捕获阶段的全页面 `scroll` 监听；富文本预热改用浏览器 `IntersectionObserver` 和 idle 队列，因此滚动侧边栏不会扫描会话内容。
+- 富文本 MutationObserver 只处理消息区域，代码编辑器内部和侧边栏的 DOM 变化不会触发全局查询。
+- 对含有大量 fenced code blocks 的空闲首屏/历史回复（包括用户和 AI 消息），Worker 将代码围栏替换为轻量标记；页面使用固定高度的静态 `<pre>` 分批填充，保留复制和展开，不再同步初始化大量 CodeMirror。编辑或发送前会还原原始 fenced Markdown。
+- 用户消息中的重型代码也可轻量显示；进入编辑框或发回服务器前会恢复原始 fenced Markdown。
+- SmoothedMarkdown 的模块来源从实际代码块测量调用栈动态学习，不再依赖单个固定的前端 chunk 哈希。
+
+脱敏分析结果：
+
+- [`analysis/output/trace-summary.json`](../analysis/output/trace-summary.json)
+- [`analysis/output/session-network-summary.json`](../analysis/output/session-network-summary.json)
+- [`analysis/output/diagnosis.md`](../analysis/output/diagnosis.md)（修复前诊断）
+- [`analysis/output/fix-validation.json`](../analysis/output/fix-validation.json)（修复后自动回归）
+
+这些文件不包含会话正文、Cookie、Token、会话 ID 或绝对抓包时间。原始 Trace/WACZ 始终保存在 `.private/`。

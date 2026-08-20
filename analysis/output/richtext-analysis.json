@@ -42,8 +42,10 @@
     "removeSmoothedCodeHeightAnimation": true,
     "skipSmoothedCodeResizeObservers": true,
     "richBlockContentVisibility": true,
-    "proactiveWarmDistancePx": 8000,
+    "richBlockWarmDistancePx": 8000,
+    "codeEditorWarmDistancePx": 3000,
     "warmTrigger": "requestAnimationFrame-distance-scan",
+    "deferCodeMirrorObserversUntilHot": true,
     "codeMirrorActivationsPerAnimationFrame": 1,
     "ordinaryRichBlockActivationsPerAnimationFrame": 3,
     "warmedBlocksStayMaterialized": true

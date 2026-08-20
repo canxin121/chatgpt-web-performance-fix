@@ -27,6 +27,9 @@ const lazyInitialPath = `/backend-api/conversations/${conversationId}`;
 const lazyMessagesPath = `${lazyInitialPath}/messages`;
 const asyncConversationPath =
   "/backend-api/conversation/11111111-1111-4111-8111-111111111111";
+const fallbackConversationId = "55555555-5555-4555-8555-555555555555";
+const fallbackConversationPath =
+  `/backend-api/conversation/${fallbackConversationId}`;
 const emptyConversationId = "44444444-4444-4444-8444-444444444444";
 const emptyConversationPath = `/backend-api/conversation/${emptyConversationId}`;
 const emptyInitialPath = `/backend-api/conversations/${emptyConversationId}`;
@@ -35,6 +38,10 @@ const asyncConversationText = JSON.stringify({
   ...payload,
   conversation_id: "11111111-1111-4111-8111-111111111111",
   async_status: { status: "running" },
+});
+const fallbackConversationText = JSON.stringify({
+  ...payload,
+  conversation_id: fallbackConversationId,
 });
 const activeMessages = traceActivePath(payload)
   .map(({ node }) => node.message)
@@ -62,8 +69,21 @@ const nativeInitialMessages = [
 const nativeOlderMessages = activeTurns.toSorted(
   (left, right) => right.length - left.length,
 )[0]!;
+const codeBlockCount = (messages: ConversationMessage[]) =>
+  messages.reduce((sum, message) => {
+    const text = Array.isArray(message.content?.parts)
+      ? message.content.parts.filter((part): part is string => typeof part === "string").join("\n")
+      : "";
+    return sum + Math.floor((text.match(/```/g) ?? []).length / 2);
+  }, 0);
+const nativeRichMessages = activeTurns.toSorted(
+  (left, right) => codeBlockCount(right) - codeBlockCount(left),
+)[0]!;
+const richConversationId = "55555555-5555-4555-8555-555555555555";
+const richMessagesPath = `/backend-api/conversations/${richConversationId}/messages`;
 let conversationGets = 0;
 let asyncConversationGets = 0;
+let fallbackLegacyGets = 0;
 let emptyLegacyGets = 0;
 let emptyInitialGets = 0;
 let emptyMessagesGets = 0;
@@ -71,6 +91,7 @@ let lazyInitialGets = 0;
 let lazyMessagesGets = 0;
 let nativeInitialGets = 0;
 let nativeMessagesGets = 0;
+let richMessagesGets = 0;
 const lazyInitialNumTurns: string[] = [];
 const lazyMessagesNumTurns: string[] = [];
 const nativeInitialNumTurns: string[] = [];
@@ -84,7 +105,16 @@ function harnessHtml(): string {
     <meta charset="utf-8">
     <title>ChatGPT performance-fix browser harness</title>
     <script>
+      window.__capturedNativeFetch = window.fetch.bind(window);
       window.__richNativeResizeObserveCalls = 0;
+      window.__richNativeIntersectionObserveCalls = 0;
+      const HarnessNativeIntersectionObserver = window.IntersectionObserver;
+      window.IntersectionObserver = class HarnessCountingIntersectionObserver extends HarnessNativeIntersectionObserver {
+        observe(target) {
+          window.__richNativeIntersectionObserveCalls += 1;
+          return super.observe(target);
+        }
+      };
       const HarnessNativeResizeObserver = window.ResizeObserver;
       window.ResizeObserver = class HarnessCountingResizeObserver extends HarnessNativeResizeObserver {
         observe(target, options) {
@@ -100,10 +130,12 @@ function harnessHtml(): string {
     <script type="module">
       const endpoint = ${JSON.stringify(conversationPath)};
       const asyncEndpoint = ${JSON.stringify(asyncConversationPath)};
+      const fallbackEndpoint = ${JSON.stringify(fallbackConversationPath)};
       const emptyEndpoint = ${JSON.stringify(emptyConversationPath)};
       const lazyMessagesEndpoint = ${JSON.stringify(lazyMessagesPath)};
       const nativeInitialEndpoint = ${JSON.stringify(nativeInitialPath)};
       const nativeMessagesEndpoint = ${JSON.stringify(nativeMessagesPath)};
+      const richMessagesEndpoint = ${JSON.stringify(richMessagesPath)};
       const expectedCurrentNode = ${JSON.stringify(payload.current_node)};
 
       function visibleTranscriptRoles(messages) {
@@ -146,6 +178,39 @@ function harnessHtml(): string {
         ).readVisibilityState();
         const smoothedMarkdownBypass =
           document.documentElement.dataset.chatgptSmoothedMarkdownBypass;
+
+        // Simulate ChatGPT capturing the original fetch before the userscript
+        // replaces window.fetch. Response.prototype must still compact the full
+        // legacy payload before the application receives JSON/text.
+        const fallbackFirstResponse = await window.__capturedNativeFetch(
+          fallbackEndpoint,
+          { cache: "no-store" },
+        );
+        const fallbackFirst = await fallbackFirstResponse.json();
+        const fallbackSecondResponse = await window.__capturedNativeFetch(
+          fallbackEndpoint,
+          { cache: "no-store" },
+        );
+        const fallbackSecond = await fallbackSecondResponse.json();
+        const fallbackTextResponse = await window.__capturedNativeFetch(
+          fallbackEndpoint,
+          { cache: "no-store" },
+        );
+        const fallbackTextPayload = JSON.parse(await fallbackTextResponse.text());
+        const fallbackResponseHook =
+          document.documentElement.dataset.chatgptResponseFallback;
+        const fallbackOptimizedCount = Number(
+          document.documentElement.dataset.chatgptLegacyFallbackOptimized ?? "0",
+        );
+        const fallbackCacheHits = Number(
+          document.documentElement.dataset.chatgptLegacyFallbackCacheHits ?? "0",
+        );
+        const fallbackOriginalNodes = Number(
+          document.documentElement.dataset.chatgptLegacyFallbackOriginalNodes ?? "0",
+        );
+        const fallbackKeptNodes = Number(
+          document.documentElement.dataset.chatgptLegacyFallbackKeptNodes ?? "0",
+        );
 
         const [firstResponse, secondResponse] = await Promise.all([
           fetch(endpoint),
@@ -216,6 +281,8 @@ function harnessHtml(): string {
           "&include_has_versions=true&num_turns=20";
         const nativeOlderResponse = await fetch(nativeOlderUrl);
         const nativeOlder = await nativeOlderResponse.json();
+        const nativeOlderCachedResponse = await fetch(nativeOlderUrl);
+        const nativeOlderCached = await nativeOlderCachedResponse.json();
         const nativeOlderHasNoLocalCursor =
           nativeOlder.page_info.start_cursor == null &&
           nativeOlder.page_info.has_previous_page === false;
@@ -223,6 +290,50 @@ function harnessHtml(): string {
           (message) => message.author?.role ?? null,
         );
         const nativeOlderAnswerChannel = nativeOlder.messages[1]?.channel ?? null;
+
+        const richResponse = await fetch(
+          richMessagesEndpoint +
+            "?before=rich-cursor&include_has_versions=true&num_turns=20",
+        );
+        const richPage = await richResponse.json();
+        const richAssistant = richPage.messages.find(
+          (message) => message.author?.role === "assistant",
+        );
+        const richAssistantText = Array.isArray(richAssistant?.content?.parts)
+          ? richAssistant.content.parts.filter((part) => typeof part === "string").join("\n")
+          : "";
+        const staticLinks = [
+          ...richAssistantText.matchAll(/\((https:\/\/chatgpt\.com\/#cgptperf-code=[^)]+)\)/g),
+        ].map((match) => match[1]);
+        const richHistoryHasStaticMarkers = staticLinks.length >= 4;
+        const richHistoryFenceCount = (richAssistantText.match(/```/g) ?? []).length;
+        let staticCodeHydrated = false;
+        let staticCodeReady = false;
+        let staticCodeNoCodeMirror = false;
+        let staticCodeHeightStable = false;
+        if (staticLinks[0]) {
+          const markerMessage = document.createElement("article");
+          markerMessage.dataset.messageId = "static-code-test";
+          const paragraph = document.createElement("p");
+          const anchor = document.createElement("a");
+          anchor.href = staticLinks[0];
+          anchor.textContent = "代码块";
+          paragraph.append(anchor);
+          markerMessage.append(paragraph);
+          document.body.append(markerMessage);
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          const staticBlock = markerMessage.querySelector('[data-chatgpt-static-code]');
+          const heightBefore = staticBlock?.getBoundingClientRect().height ?? 0;
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          const heightAfter = staticBlock?.getBoundingClientRect().height ?? 0;
+          staticCodeHydrated = Boolean(staticBlock);
+          staticCodeReady =
+            staticBlock?.getAttribute("data-chatgpt-static-code-state") === "ready" &&
+            (staticBlock.querySelector("code")?.textContent?.length ?? 0) > 0;
+          staticCodeNoCodeMirror = !staticBlock?.querySelector('[class*="_codemirror"]');
+          staticCodeHeightStable =
+            heightBefore > 0 && Math.abs(heightAfter - heightBefore) < 1;
+        }
 
         const observerRoot = document.createElement("div");
         observerRoot.style.cssText =
@@ -308,6 +419,23 @@ function harnessHtml(): string {
         coldRichEditor.className = "Rx43rG_codemirror";
         coldRichHost.append(coldRichEditor);
         document.body.append(coldRichHost);
+
+        const deferredRichHost = document.createElement("article");
+        deferredRichHost.dataset.messageId = "rich-deferred-message";
+        deferredRichHost.style.cssText =
+          "position:fixed;left:140px;top:14000px;width:120px;height:120px";
+        const deferredRichEditor = document.createElement("div");
+        deferredRichEditor.id = "rich-deferred-editor";
+        deferredRichEditor.className = "Rx43rG_codemirror";
+        const deferredScroller = document.createElement("div");
+        deferredScroller.className = "cm-scroller";
+        const deferredContent = document.createElement("div");
+        deferredContent.className = "cm-content";
+        deferredScroller.append(deferredContent);
+        deferredRichEditor.append(deferredScroller);
+        deferredRichHost.append(deferredRichEditor);
+        document.body.append(deferredRichHost);
+
         const prewarmRichHost = document.createElement("article");
         prewarmRichHost.dataset.messageId = "rich-prewarm-message";
         prewarmRichHost.style.cssText =
@@ -353,6 +481,37 @@ function harnessHtml(): string {
             requestAnimationFrame(() => setTimeout(resolve, 700)),
           ),
         );
+        const deferredEditorInitialState = deferredRichEditor.getAttribute(
+          "data-chatgpt-rich-editor-state",
+        );
+        const nativeIoBeforeDeferred = window.__richNativeIntersectionObserveCalls;
+        const nativeRoBeforeDeferred = window.__richNativeResizeObserveCalls;
+        const deferredIntersectionObserver = new IntersectionObserver(() => {});
+        const deferredResizeObserver = new ResizeObserver(() => {});
+        deferredIntersectionObserver.observe(deferredContent);
+        deferredResizeObserver.observe(deferredScroller);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const nativeIoAfterDeferred = window.__richNativeIntersectionObserveCalls;
+        const nativeRoAfterDeferred = window.__richNativeResizeObserveCalls;
+        deferredRichEditor.setAttribute("data-chatgpt-rich-editor-state", "hot");
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const nativeIoAfterHot = window.__richNativeIntersectionObserveCalls;
+        const nativeRoAfterHot = window.__richNativeResizeObserveCalls;
+        const codeMirrorIoDeferred = Number(
+          document.documentElement.dataset.chatgptCodeMirrorIoDeferred ?? "0",
+        );
+        const codeMirrorIoResumed = Number(
+          document.documentElement.dataset.chatgptCodeMirrorIoResumed ?? "0",
+        );
+        const codeMirrorRoDeferred = Number(
+          document.documentElement.dataset.chatgptCodeMirrorRoDeferred ?? "0",
+        );
+        const codeMirrorRoResumed = Number(
+          document.documentElement.dataset.chatgptCodeMirrorRoResumed ?? "0",
+        );
+        deferredIntersectionObserver.disconnect();
+        deferredResizeObserver.disconnect();
+
         const richMessage = richHost.querySelector('[data-message-id="rich-test-message"]');
         const richMessageContentVisibility = getComputedStyle(richMessage).contentVisibility;
         const smoothedStyle = getComputedStyle(document.querySelector("#rich-smoothed"));
@@ -394,6 +553,9 @@ function harnessHtml(): string {
         const richTextWarmDistancePx = Number(
           document.documentElement.dataset.chatgptRichTextWarmDistancePx ?? "0",
         );
+        const codeEditorWarmDistancePx = Number(
+          document.documentElement.dataset.chatgptCodeEditorWarmDistancePx ?? "0",
+        );
         const richBlocksCold = Number(
           document.documentElement.dataset.chatgptRichTextBlocksCold ?? "0",
         );
@@ -410,6 +572,18 @@ function harnessHtml(): string {
           normalVisibilityState,
           smoothedVisibilityState,
           smoothedMarkdownBypass,
+          fallbackResponseHook,
+          fallbackFirstNodes: Object.keys(fallbackFirst.mapping).length,
+          fallbackSecondNodes: Object.keys(fallbackSecond.mapping).length,
+          fallbackTextNodes: Object.keys(fallbackTextPayload.mapping).length,
+          fallbackResponseUrlPreserved:
+            fallbackFirstResponse.url === new URL(fallbackEndpoint, location.href).href &&
+            fallbackSecondResponse.url === new URL(fallbackEndpoint, location.href).href &&
+            fallbackTextResponse.url === new URL(fallbackEndpoint, location.href).href,
+          fallbackOptimizedCount,
+          fallbackCacheHits,
+          fallbackOriginalNodes,
+          fallbackKeptNodes,
           firstNodes: Object.keys(first.mapping).length,
           lazyInitialVisibleRoles: visibleTranscriptRoles(mappingMessages(first.mapping)),
           nativeInitialVisibleRoles: visibleTranscriptRoles(nativeInitial.messages),
@@ -446,12 +620,26 @@ function harnessHtml(): string {
           lazyInitialNumTurnsBeforeMutation: beforeMutation.lazyInitialNumTurns,
           lazyMessagesNumTurnsBeforeMutation: beforeMutation.lazyMessagesNumTurns,
           legacyFullGetsBeforeMutation: beforeMutation.conversationGets,
+          fallbackLegacyGets: afterMutation.fallbackLegacyGets,
           nativeInitialMessages: nativeInitial.messages.length,
           nativeLocalMessages: nativeLocal.messages.length,
           nativeOlderMessages: nativeOlder.messages.length,
           nativeOlderRoles,
           nativeOlderAnswerChannel,
           nativeOlderHasNoLocalCursor,
+          richHistoryHasStaticMarkers,
+          richHistoryFenceCount,
+          staticCodeHydrated,
+          staticCodeReady,
+          staticCodeNoCodeMirror,
+          staticCodeHeightStable,
+          nativeOlderCachedRoles: nativeOlderCached.messages.map(
+            (message) => message.author?.role ?? null,
+          ),
+          historyCacheHits: Number(
+            document.documentElement.dataset.chatgptHistoryCacheHits ?? "0",
+          ),
+          optimizerWorkerUsed: jsonWorkerParses > 0,
           userTaskRanBeforeLocalHistory,
           nativeInitialUsesLocalCursor:
             typeof localCursor === "string" && localCursor.startsWith("cgptperf-"),
@@ -507,6 +695,26 @@ function harnessHtml(): string {
           richPrewarmEditorState,
           richPrewarmEditorTop,
           richTextWarmDistancePx,
+          codeEditorWarmDistancePx,
+          deferredEditorInitialState,
+          nativeIoBeforeDeferred,
+          nativeIoAfterDeferred,
+          nativeIoAfterHot,
+          codeMirrorIoStayedDeferred:
+            nativeIoAfterDeferred === nativeIoBeforeDeferred,
+          codeMirrorIoResumedOnce:
+            nativeIoAfterHot === nativeIoBeforeDeferred + 1,
+          nativeRoBeforeDeferred,
+          nativeRoAfterDeferred,
+          nativeRoAfterHot,
+          codeMirrorRoStayedDeferred:
+            nativeRoAfterDeferred === nativeRoBeforeDeferred,
+          codeMirrorRoResumedOnce:
+            nativeRoAfterHot === nativeRoBeforeDeferred + 1,
+          codeMirrorIoDeferred,
+          codeMirrorIoResumed,
+          codeMirrorRoDeferred,
+          codeMirrorRoResumed,
           richBlocksCold,
           richBlocksActivated,
           currentNodePreserved:
@@ -660,6 +868,15 @@ const server = Bun.serve({
         },
       });
     }
+    if (url.pathname === richMessagesPath && request.method === "GET") {
+      richMessagesGets += 1;
+      return jsonNoStore({
+        messages: nativeRichMessages,
+        page_info: { has_previous_page: false, start_cursor: null },
+        safe_urls: [],
+        blocked_urls: [],
+      });
+    }
     if (url.pathname === nativeInitialPath && request.method === "GET") {
       nativeInitialGets += 1;
       nativeInitialNumTurns.push(url.searchParams.get("num_turns") ?? "missing");
@@ -730,6 +947,15 @@ const server = Bun.serve({
         headers: { "content-type": "application/javascript; charset=utf-8" },
       });
     }
+    if (url.pathname === fallbackConversationPath && request.method === "GET") {
+      fallbackLegacyGets += 1;
+      return new Response(fallbackConversationText, {
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+        },
+      });
+    }
     if (url.pathname === conversationPath && request.method === "GET") {
       conversationGets += 1;
       await Bun.sleep(75);
@@ -752,6 +978,7 @@ const server = Bun.serve({
       return jsonNoStore({
         conversationGets,
         asyncConversationGets,
+        fallbackLegacyGets,
         emptyLegacyGets,
         emptyInitialGets,
         emptyMessagesGets,
@@ -931,14 +1158,23 @@ const expected = {
   normalVisibilityState: "visible",
   smoothedVisibilityState: "hidden",
   smoothedMarkdownBypass: "enabled",
+  fallbackResponseHook: "enabled",
+  fallbackFirstNodes: 35,
+  fallbackSecondNodes: 35,
+  fallbackTextNodes: 35,
+  fallbackResponseUrlPreserved: true,
+  fallbackOptimizedCount: 1,
+  fallbackCacheHits: 2,
+  fallbackOriginalNodes: 5_405,
+  fallbackKeptNodes: 35,
   firstNodes: 5,
   lazyInitialVisibleRoles: ["user", "assistant"],
   nativeInitialVisibleRoles: ["user", "assistant"],
   secondNodes: 5,
   cachedNodes: 5,
   postInvalidationNodes: 5,
-  asyncFirstNodes: 137,
-  asyncSecondNodes: 137,
+  asyncFirstNodes: 35,
+  asyncSecondNodes: 35,
   emptyLazyNodes: 5,
   emptyLazyPaginationEnabled: true,
   emptyLazyHeader: "native-pagination",
@@ -959,12 +1195,22 @@ const expected = {
   lazyInitialNumTurnsBeforeMutation: ["2", "2"],
   lazyMessagesNumTurnsBeforeMutation: ["4", "4", "2", "4"],
   legacyFullGetsBeforeMutation: 0,
+  fallbackLegacyGets: 3,
   nativeInitialMessages: 4,
   nativeLocalMessages: 2,
   nativeOlderMessages: 2,
   nativeOlderRoles: ["user", "assistant"],
   nativeOlderAnswerChannel: "final",
   nativeOlderHasNoLocalCursor: true,
+  richHistoryHasStaticMarkers: true,
+  richHistoryFenceCount: 0,
+  staticCodeHydrated: true,
+  staticCodeReady: true,
+  staticCodeNoCodeMirror: true,
+  staticCodeHeightStable: true,
+  nativeOlderCachedRoles: ["user", "assistant"],
+  historyCacheHits: 1,
+  optimizerWorkerUsed: true,
   userTaskRanBeforeLocalHistory: true,
   nativeInitialUsesLocalCursor: true,
   nativeLocalRestoresServerCursor: true,
@@ -1000,7 +1246,7 @@ const expected = {
   nativeResizeAfterSmoothed: 0,
   nativeResizeAfterNormal: 1,
   skippedRichResizeObservers: 36,
-  richEditorsCold: 4,
+  richEditorsCold: 5,
   richEditorsActivated: 3,
   richEditorState: "hot",
   richHotEditorState: "hot",
@@ -1010,6 +1256,16 @@ const expected = {
   richPrewarmEditorState: "hot",
   richPrewarmEditorTop: 2200,
   richTextWarmDistancePx: 8000,
+  codeEditorWarmDistancePx: 3000,
+  deferredEditorInitialState: "cold",
+  codeMirrorIoStayedDeferred: true,
+  codeMirrorIoResumedOnce: true,
+  codeMirrorRoStayedDeferred: true,
+  codeMirrorRoResumedOnce: true,
+  codeMirrorIoDeferred: 1,
+  codeMirrorIoResumed: 1,
+  codeMirrorRoDeferred: 1,
+  codeMirrorRoResumed: 1,
   richBlocksCold: 37,
   richBlocksActivated: 37,
   currentNodePreserved: true,

@@ -61,6 +61,10 @@ export interface OptimizerOptions {
   minNodeCount: number;
   /** Keep every node in the newest N user turns. */
   recentFullTurns: number;
+  /** Preserve the direct parent of current_node for live tool-result continuity. */
+  preserveCurrentParent: boolean;
+  /** Reduce completed legacy turns to one user question and one AI answer. */
+  collapseTurnsToQuestionAnswer: boolean;
 }
 
 export interface OptimizationStats {
@@ -139,6 +143,8 @@ export interface ConversationApiMatch {
 export const DEFAULT_OPTIMIZER_OPTIONS: Readonly<OptimizerOptions> = {
   minNodeCount: 250,
   recentFullTurns: 1,
+  preserveCurrentParent: false,
+  collapseTurnsToQuestionAnswer: false,
 };
 
 const ALWAYS_KEEP_ROLES = new Set(["system", "developer"]);
@@ -245,6 +251,70 @@ function traceActivePath(
   return reversePath;
 }
 
+function collapseNodeEntriesToQuestionAnswer(
+  entries: Array<{ id: string; node: ConversationNode }>,
+  forceKeepNodeIds: ReadonlySet<string>,
+): Array<{ id: string; node: ConversationNode }> {
+  const collapsed: Array<{ id: string; node: ConversationNode }> = [];
+  let turn: Array<{ id: string; node: ConversationNode }> = [];
+
+  const flushTurn = () => {
+    if (turn.length === 0) return;
+    const user = turn.find(
+      ({ node }) => node.message?.author?.role === "user",
+    );
+    if (!user) {
+      collapsed.push(...turn);
+      turn = [];
+      return;
+    }
+
+    const assistants = turn.filter(
+      ({ node }) =>
+        node.message?.author?.role === "assistant" &&
+        shouldKeepHistoricMessage(node.message),
+    );
+    const answer =
+      [...assistants].reverse().find(
+        ({ node }) => node.message?.channel === "final",
+      ) ?? assistants.at(-1);
+    if (!answer) {
+      const forcedInTurn = turn.filter((entry) => forceKeepNodeIds.has(entry.id));
+      if (forcedInTurn.length > 0) {
+        const selected = new Set<string>([
+          user.id,
+          ...forcedInTurn.map((entry) => entry.id),
+        ]);
+        collapsed.push(...turn.filter((entry) => selected.has(entry.id)));
+      } else {
+        collapsed.push(...turn);
+      }
+      turn = [];
+      return;
+    }
+
+    const selected = new Set<string>([user.id, answer.id]);
+    for (const entry of turn) {
+      if (forceKeepNodeIds.has(entry.id)) selected.add(entry.id);
+      const role = entry.node.message?.author?.role;
+      if (role && ALWAYS_KEEP_ROLES.has(role)) selected.add(entry.id);
+    }
+    collapsed.push(...turn.filter((entry) => selected.has(entry.id)));
+    turn = [];
+  };
+
+  for (const entry of entries) {
+    if (entry.node.message?.author?.role === "user") flushTurn();
+    if (turn.length > 0 || entry.node.message?.author?.role === "user") {
+      turn.push(entry);
+    } else {
+      collapsed.push(entry);
+    }
+  }
+  flushTurn();
+  return collapsed;
+}
+
 /**
  * Compact a legacy full-conversation response into a linear active branch.
  *
@@ -271,6 +341,12 @@ export function optimizeConversationPayload<
         options.recentFullTurns ?? DEFAULT_OPTIMIZER_OPTIONS.recentFullTurns,
       ),
     ),
+    preserveCurrentParent:
+      options.preserveCurrentParent ??
+      DEFAULT_OPTIMIZER_OPTIONS.preserveCurrentParent,
+    collapseTurnsToQuestionAnswer:
+      options.collapseTurnsToQuestionAnswer ??
+      DEFAULT_OPTIMIZER_OPTIONS.collapseTurnsToQuestionAnswer,
   };
 
   if (!isRecord(payload) || !isRecord(payload.mapping)) {
@@ -330,7 +406,14 @@ export function optimizeConversationPayload<
     0,
   );
   const firstFullTurnIndex = Math.max(0, userTurns - resolved.recentFullTurns);
-  const kept: Array<{ id: string; node: ConversationNode }> = [];
+  const forcedNodeIds = new Set<string>([payload.current_node]);
+  if (resolved.preserveCurrentParent) {
+    const parentId = mapping[payload.current_node]?.parent;
+    if (typeof parentId === "string" && parentId.length > 0) {
+      forcedNodeIds.add(parentId);
+    }
+  }
+  let kept: Array<{ id: string; node: ConversationNode }> = [];
   const removedByKind: Record<string, number> = {};
   let currentTurnIndex = -1;
 
@@ -341,11 +424,24 @@ export function optimizeConversationPayload<
       resolved.recentFullTurns > 0 && currentTurnIndex >= firstFullTurnIndex;
     const keep = inRecentFullTurn || shouldKeepHistoricNode(entry.node);
 
-    if (keep || entry.id === payload.current_node) {
+    if (keep || forcedNodeIds.has(entry.id)) {
       kept.push(entry);
     } else {
       const kind = kindOf(entry.node);
       removedByKind[kind] = (removedByKind[kind] ?? 0) + 1;
+    }
+  }
+
+  if (resolved.collapseTurnsToQuestionAnswer) {
+    const collapsed = collapseNodeEntriesToQuestionAnswer(kept, forcedNodeIds);
+    if (collapsed.length < kept.length) {
+      const retainedIds = new Set(collapsed.map((entry) => entry.id));
+      for (const entry of kept) {
+        if (retainedIds.has(entry.id)) continue;
+        const kind = kindOf(entry.node);
+        removedByKind[kind] = (removedByKind[kind] ?? 0) + 1;
+      }
+      kept = collapsed;
     }
   }
 
